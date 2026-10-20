@@ -1,0 +1,16 @@
+{
+  "name": "estudio-motion",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Filmes de motion graphics renderizados quadro a quadro a partir de window.seek(t).",
+  "type": "module",
+  "scripts": {
+    "render": "node render.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "puppeteer": "^25.15.0"
+  }
+}

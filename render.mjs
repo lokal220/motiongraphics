@@ -13,6 +13,7 @@
  *   node render.mjs filmes/02-delivery/index.html                  MP4 em resultados/02-delivery.mp4
  *   node render.mjs filmes/02-delivery/index.html --sheet          folha de contato (1 quadro por batida)
  *   node render.mjs filmes/02-delivery/index.html --frames 0,2.5   PNGs desses instantes
+ *   node render.mjs filmes/02-delivery/index.html --som            só a trilha, já em -14 LUFS (para medir as batidas)
  *
  * Opções:
  *   --out arquivo.mp4     destino do MP4
@@ -42,6 +43,7 @@ const { values: opt, positionals } = parseArgs({
     out: { type: 'string' },
     sheet: { type: 'boolean' },
     frames: { type: 'string' },
+    som: { type: 'boolean' },
     beats: { type: 'string' },
     audio: { type: 'string' },
     help: { type: 'boolean', short: 'h' },
@@ -360,7 +362,7 @@ async function launchBrowser() {
 
 async function main() {
   if (opt.help || positionals.length !== 1) {
-    console.log('Uso: node render.mjs <filme.html> [--sheet | --frames 0,1.5] [--out x.mp4] [--beats b.json] [--audio m.mp3]');
+    console.log('Uso: node render.mjs <filme.html> [--sheet | --frames 0,1.5 | --som] [--out x.mp4] [--beats b.json] [--audio m.mp3]');
     process.exitCode = opt.help ? 0 : 1;
     return;
   }
@@ -386,6 +388,10 @@ async function main() {
         console.log(`  ${rel(out)}`);
       }
       await checkContract(page, errors, 'nos quadros');
+    } else if (opt.som) {
+      const audio = await buildAudio(page, film, tmp);
+      await checkContract(page, errors, 'na trilha');
+      if (audio) console.log(`  trilha: ${rel(audio)}`);
     } else if (opt.sheet) {
       const beats = await loadBeats(file, film);
       const out = await contactSheet(browser, page, film, beats, tmp, name);

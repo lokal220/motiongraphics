@@ -1,0 +1,799 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<title>01c - pedido de delivery (com regras)</title>
+<!--
+  Cena 01 refeita seguindo o CLAUDE.md.
+  Pedido confirmado -> moto sai do restaurante -> atravessa o mapa -> chega em casa; contador de 20 a 0 min.
+  Tudo é desenhado em seek(t) a partir do zero; trilha sintetizada a 120 BPM, acertos na grade (colcheias).
+  Render: node render.mjs filmes/01c-com-regras/index.html
+-->
+<style>
+  @font-face { font-family: 'Titulo'; src: local('Bahnschrift'); font-weight: 300 700; font-stretch: 75% 100%; }
+  html, body { margin: 0; background: #ECE9E4; }
+  canvas { display: block; }
+</style>
+<canvas id="c" width="1080" height="1920"></canvas>
+<script>
+'use strict';
+
+// ---------------------------------------------------------------- constantes
+const W = 1080, H = 1920, FPS = 30, DUR = 10;
+const BPM = 120, BEAT = 60 / BPM;            // 0,5 s; colcheia = 0,25 s
+const b = (n) => n * BEAT;                   // batida n -> segundos
+window.FILM = { width: W, height: H, fps: FPS, duration: DUR };
+
+// uma cor de destaque; o resto é tinta e neutros quentes
+const ACC = '#FF5A1F', INK = '#15182C', INK2 = '#6A6F82', LINE = '#E7E3DD', PAPER = '#FFFFFF';
+const MAP = {
+  bg: '#ECE9E4', bldg: ['#DCD7CF', '#D8D3CA', '#E0DBD3'], street: '#FFFFFF', park: '#DCD8CF',
+  tree: '#CFCABF', water: '#D5D8DB', label: '#A8A398', traveled: '#C9C4BB',
+};
+const TITLE = 'Titulo', UI = '"Segoe UI"';
+
+// linha do tempo (s) - tudo cai em batidas ou colcheias
+const T = {
+  // gancho em cascata de semicolcheias: algo novo a cada 0,125-0,25 s
+  checkPop: -0.15, check: [-0.1, 0.2], line1: b(0.25), line2: b(0.5), road: [b(1), b(2.8)], eta: b(1.5), meta: b(2),
+  morph: [b(3), b(4)],                       // 1,5-2,0: a tela laranja encolhe e vira o chip de status
+  sheet: [b(3.5), b(4.5)],
+  route: [b(4), b(5.5)], pinR: b(4.5), pinH: b(5), moto: b(5.5),
+  dep: b(6), arr: b(16),                     // a moto sai às 3,0 s e chega às 8,0 s
+  lock: [b(6), b(8)],                        // câmera passa a seguir a moto
+  bubble: [b(8), b(11)],                     // 4,0-5,5: mensagem do entregador
+  near: b(12),                               // 6,0: "Chegando"
+  rate: b(18),                               // 9,0: avaliação
+};
+const STATUS = [[b(4), 'Pedido confirmado'], [T.dep, 'Saiu para entrega'], [T.near, 'Chegando'], [T.arr, 'Entregue!']];
+
+// ---------------------------------------------------------------- utilidades puras
+const clamp = (x, a = 0, z = 1) => Math.min(z, Math.max(a, x));
+const prog = (t, a, z) => clamp((t - a) / (z - a));
+const lerp = (a, z, k) => a + (z - a) * k;
+const outCubic = (k) => 1 - (1 - k) ** 3;
+const inCubic = (k) => k ** 3;
+const inOutCubic = (k) => (k < 0.5 ? 4 * k ** 3 : 1 - (-2 * k + 2) ** 3 / 2);
+const outBack = (k, s = 1.70158) => 1 + (s + 1) * (k - 1) ** 3 + s * (k - 1) ** 2;
+const inBack = (k, s = 1.70158) => (s + 1) * k ** 3 - s * k ** 2;
+const bump = (t, a, d) => Math.sin(Math.PI * prog(t, a, a + d));
+
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// ---------------------------------------------------------------- mapa (pré-calculado, imutável)
+const XS = [], YS = [];
+for (let x = -520; x <= 2000; x += 280) XS.push(x);
+for (let y = -500; y <= 2580; y += 280) YS.push(y);
+const MAJOR_X = 880, MAJOR_Y = 620;
+const streetW = (axis, v) => ((axis === 'x' ? v === MAJOR_X : v === MAJOR_Y) ? 54 : 32);
+
+const BLOCKS = (() => {
+  const rnd = mulberry32(4821), out = [];
+  for (let i = 0; i + 1 < XS.length; i++) {
+    for (let j = 0; j + 1 < YS.length; j++) {
+      const x0 = XS[i] + 30, x1 = XS[i + 1] - 30, y0 = YS[j] + 30, y1 = YS[j + 1] - 30;
+      if (XS[i] === 40 && YS[j] === 900) { out.push({ kind: 'park', x0, y0, x1, y1 }); continue; }
+      if (XS[i] === 1160 && YS[j] === 60) { out.push({ kind: 'water', x0, y0, x1, y1 }); continue; }
+      const gap = 12, half = (x1 - x0 - gap) / 2, halfY = (y1 - y0 - gap) / 2;
+      const merged = rnd() < 0.3;
+      for (let r = 0; r < 2; r++) {
+        if (merged && rnd() < 0.5) {
+          out.push({ kind: 'bldg', x0, y0: y0 + r * (halfY + gap), x1, y1: y0 + r * (halfY + gap) + halfY, c: MAP.bldg[Math.floor(rnd() * 3)] });
+          continue;
+        }
+        for (let c = 0; c < 2; c++) {
+          if (rnd() < 0.14) continue;
+          const bx = x0 + c * (half + gap), by = y0 + r * (halfY + gap);
+          out.push({ kind: 'bldg', x0: bx, y0: by, x1: bx + half, y1: by + halfY, c: MAP.bldg[Math.floor(rnd() * 3)] });
+        }
+      }
+    }
+  }
+  return out;
+})();
+const TREES = (() => {
+  const rnd = mulberry32(77), out = [];
+  for (let i = 0; i < 18; i++) out.push([lerp(100, 260, rnd()), lerp(960, 1120, rnd()), lerp(12, 20, rnd())]);
+  return out;
+})();
+const LABELS = [
+  ['Av. Central', 1330, 620, 0], ['R. Aurora', 470, 340, 0], ['R. das Flores', 180, 900, 0],
+  ['R. do Sol', 1330, 1180, 0], ['Av. Brasil', 880, 330, -Math.PI / 2],
+];
+
+// rota com cantos arredondados, reamostrada em passos iguais.
+// Começa na porta do restaurante (dentro do quarteirão) e termina dentro da casa.
+const RESTAURANT = { x: 196, y: 250 }, HOUSE = { x: 1266, y: 1320 };
+const ROUTE = [[196, 250], [320, 250], [320, 620], [880, 620], [880, 1180], [1160, 1180], [1160, 1320], [1266, 1320]];
+const PATH = (() => {
+  const raw = [ROUTE[0]];
+  for (let i = 1; i + 1 < ROUTE.length; i++) {
+    const [x0, y0] = ROUTE[i - 1], [x1, y1] = ROUTE[i], [x2, y2] = ROUTE[i + 1];
+    const l1 = Math.hypot(x1 - x0, y1 - y0), l2 = Math.hypot(x2 - x1, y2 - y1), r = Math.min(70, l1 / 2, l2 / 2);
+    const ax = x1 - ((x1 - x0) / l1) * r, ay = y1 - ((y1 - y0) / l1) * r;
+    const bx = x1 + ((x2 - x1) / l2) * r, by = y1 + ((y2 - y1) / l2) * r;
+    raw.push([ax, ay]);
+    for (let k = 1; k <= 24; k++) {
+      const u = k / 24;
+      raw.push([(1 - u) ** 2 * ax + 2 * (1 - u) * u * x1 + u * u * bx, (1 - u) ** 2 * ay + 2 * (1 - u) * u * y1 + u * u * by]);
+    }
+  }
+  raw.push(ROUTE[ROUTE.length - 1]);
+  const cum = [0];
+  for (let i = 1; i < raw.length; i++) cum.push(cum[i - 1] + Math.hypot(raw[i][0] - raw[i - 1][0], raw[i][1] - raw[i - 1][1]));
+  const L = cum[cum.length - 1], n = Math.round(L / 2), pts = [];
+  for (let k = 0, j = 0; k <= n; k++) {
+    const d = (L * k) / n;
+    while (j < cum.length - 2 && cum[j + 1] < d) j++;
+    const u = (d - cum[j]) / (cum[j + 1] - cum[j] || 1);
+    pts.push([lerp(raw[j][0], raw[j + 1][0], u), lerp(raw[j][1], raw[j + 1][1], u)]);
+  }
+  return pts;
+})();
+const NP = PATH.length - 1;
+function at(f) {
+  const x = clamp(f) * NP, i = Math.min(Math.floor(x), NP - 1), u = x - i;
+  return { x: lerp(PATH[i][0], PATH[i + 1][0], u), y: lerp(PATH[i][1], PATH[i + 1][1], u) };
+}
+function heading(f) {
+  const a = at(f - 0.004), z = at(f + 0.004);
+  return Math.atan2(z.y - a.y, z.x - a.x);
+}
+
+// deslocamento da moto: acelera 0,6 s, velocidade constante, freia 0,7 s
+const ACC_T = 0.6, DEC_T = 0.7, TRAVEL = T.arr - T.dep, VMAX = 1 / (TRAVEL - ACC_T / 2 - DEC_T / 2);
+function travel(t) {
+  const u = clamp(t - T.dep, 0, TRAVEL);
+  if (u < ACC_T) return (0.5 * VMAX * u * u) / ACC_T;
+  if (u < TRAVEL - DEC_T) return 0.5 * VMAX * ACC_T + VMAX * (u - ACC_T);
+  const r = TRAVEL - u;
+  return 1 - (0.5 * VMAX * r * r) / DEC_T;
+}
+const speed01 = (t) => (travel(t + 0.01) - travel(t - 0.01)) / 0.02 / VMAX;
+
+// ---------------------------------------------------------------- câmera (função pura de t)
+const SX = 540, SY = 700;
+function mixCam(a, z, k) {
+  return { x: lerp(a.x, z.x, k), y: lerp(a.y, z.y, k), z: Math.exp(lerp(Math.log(a.z), Math.log(z.z), k)) };
+}
+function camera(t) {
+  const m = at(travel(t)), ahead = at(travel(t) + 0.03);
+  let c = { x: 740, y: 760, z: lerp(0.72, 0.8, outCubic(prog(t, b(3), b(5.5)))) };
+  c = mixCam(c, { x: lerp(m.x, ahead.x, 0.8), y: lerp(m.y, ahead.y, 0.8), z: 1.32 }, inOutCubic(prog(t, ...T.lock)));
+  c = mixCam(c, { x: (m.x + HOUSE.x) / 2, y: (m.y + HOUSE.y) / 2 - 40, z: 1.0 }, inOutCubic(prog(t, T.near, T.near + 0.75)));
+  // final: afasta e mostra o trajeto inteiro já percorrido
+  c = mixCam(c, { x: 735, y: 790, z: 0.84 }, inOutCubic(prog(t, T.arr + 0.5, T.arr + 1.75)));
+  c.z *= 1 + 0.045 * bump(t, T.arr, 0.3);
+  return c;
+}
+const toScreen = (c, p) => ({ x: SX + (p.x - c.x) * c.z, y: SY + (p.y - c.y) * c.z });
+
+// ---------------------------------------------------------------- desenho
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+const fontsReady = Promise.all([
+  document.fonts.load(`700 100px ${TITLE}`), document.fonts.load(`600 100px ${TITLE}`),
+  document.fonts.load(`400 40px ${UI}`), document.fonts.load(`600 40px ${UI}`), document.fonts.load(`700 40px ${UI}`),
+]);
+
+function font(weight, size, family, stretch = 'normal') {
+  ctx.font = `${weight} ${size}px ${family}`;
+  ctx.fontStretch = stretch;
+}
+function text(s, x, y, color, align = 'left') {
+  ctx.fillStyle = color;
+  ctx.textAlign = align;
+  ctx.fillText(s, x, y);
+}
+function shadow(blur, dy, alpha) {
+  ctx.shadowColor = `rgba(21,24,44,${alpha})`;
+  ctx.shadowBlur = blur;
+  ctx.shadowOffsetY = dy;
+}
+const noShadow = () => shadow(0, 0, 0);
+function clipRect(x, y, w, h) {
+  ctx.beginPath();
+  ctx.rect(x, y, w, h);
+  ctx.clip();
+}
+function check(x, y, s, color, width, k = 1) {
+  const pts = [[x - 7 * s, y + 0.5 * s], [x - 2 * s, y + 5.5 * s], [x + 8 * s, y - 5.5 * s]];
+  drawPartial(pts, k, color, width);
+}
+function drawPartial(pts, k, color, width) {
+  if (k <= 0) return;
+  const lens = pts.slice(1).map((p, i) => Math.hypot(p[0] - pts[i][0], p[1] - pts[i][1]));
+  let left = k * lens.reduce((a, z) => a + z, 0);
+  ctx.beginPath();
+  ctx.moveTo(...pts[0]);
+  for (let i = 0; i < lens.length && left > 0; i++) {
+    const u = Math.min(1, left / lens[i]);
+    ctx.lineTo(lerp(pts[i][0], pts[i + 1][0], u), lerp(pts[i][1], pts[i + 1][1], u));
+    left -= lens[i];
+  }
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.lineCap = ctx.lineJoin = 'round';
+  ctx.stroke();
+}
+
+function drawMap(c) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = MAP.bg;
+  ctx.fillRect(0, 0, W, H);
+  ctx.setTransform(c.z, 0, 0, c.z, SX - c.x * c.z, SY - c.y * c.z);
+  for (const bk of BLOCKS) {
+    if (bk.kind === 'bldg') {
+      ctx.fillStyle = bk.c;
+      ctx.beginPath(); ctx.roundRect(bk.x0, bk.y0, bk.x1 - bk.x0, bk.y1 - bk.y0, 8); ctx.fill();
+    } else if (bk.kind === 'park') {
+      ctx.fillStyle = MAP.park;
+      ctx.beginPath(); ctx.roundRect(bk.x0, bk.y0, bk.x1 - bk.x0, bk.y1 - bk.y0, 22); ctx.fill();
+      ctx.fillStyle = MAP.tree;
+      for (const [x, y, r] of TREES) { ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); }
+    } else {
+      ctx.fillStyle = MAP.water;
+      ctx.beginPath(); ctx.roundRect(bk.x0, bk.y0, bk.x1 - bk.x0, bk.y1 - bk.y0, 70); ctx.fill();
+    }
+  }
+  ctx.strokeStyle = MAP.street;
+  ctx.lineCap = 'butt';
+  for (const x of XS) { ctx.lineWidth = streetW('x', x); ctx.beginPath(); ctx.moveTo(x, -700); ctx.lineTo(x, 2800); ctx.stroke(); }
+  for (const y of YS) { ctx.lineWidth = streetW('y', y); ctx.beginPath(); ctx.moveTo(-700, y); ctx.lineTo(2300, y); ctx.stroke(); }
+  font(600, 20, UI);
+  ctx.textBaseline = 'middle';
+  for (const [s, x, y, rot] of LABELS) {
+    ctx.save(); ctx.translate(x, y); ctx.rotate(rot); text(s, 0, 1, MAP.label, 'center'); ctx.restore();
+  }
+  ctx.textBaseline = 'alphabetic';
+}
+
+function strokePath(f0, f1, color, px, z) {
+  if (f1 - f0 < 1e-4) return;
+  const i0 = Math.ceil(f0 * NP), i1 = Math.floor(f1 * NP), a = at(f0), e = at(f1);
+  ctx.beginPath();
+  ctx.moveTo(a.x, a.y);
+  for (let i = i0; i <= i1; i++) ctx.lineTo(PATH[i][0], PATH[i][1]);
+  ctx.lineTo(e.x, e.y);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = px / z;
+  ctx.lineCap = ctx.lineJoin = 'round';
+  ctx.stroke();
+}
+function drawRoute(t, c, p) {
+  const k = inOutCubic(prog(t, ...T.route));
+  if (k <= 0) return;
+  ctx.setTransform(c.z, 0, 0, c.z, SX - c.x * c.z, SY - c.y * c.z);
+  const done = Math.min(p, k);
+  strokePath(0, k, PAPER, 28, c.z);
+  strokePath(0, done, MAP.traveled, 14, c.z);
+  strokePath(done, k, ACC, 14, c.z);
+}
+
+function pinPath() {
+  const cy = -78, r = 42, a = Math.acos(r / 78);
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.arc(0, cy, r, Math.PI / 2 + a, Math.PI / 2 - a);
+  ctx.closePath();
+}
+function drawPin(x, y, s, color, glyph) {
+  if (s <= 0.01) return;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(s, s);
+  shadow(16, 6, 0.22);
+  pinPath(); ctx.lineWidth = 12; ctx.strokeStyle = PAPER; ctx.lineJoin = 'round'; ctx.stroke();
+  noShadow();
+  pinPath(); ctx.fillStyle = color; ctx.fill();
+  ctx.fillStyle = PAPER;
+  if (glyph === 'cloche') {
+    ctx.beginPath(); ctx.arc(0, -72, 25, Math.PI, 0); ctx.fill();
+    ctx.beginPath(); ctx.roundRect(-31, -70, 62, 7, 3); ctx.fill();
+    ctx.beginPath(); ctx.arc(0, -100, 5, 0, Math.PI * 2); ctx.fill();
+  } else {
+    ctx.beginPath(); ctx.moveTo(-28, -80); ctx.lineTo(0, -106); ctx.lineTo(28, -80); ctx.closePath(); ctx.fill();
+    ctx.fillRect(-19, -82, 38, 30);
+    ctx.fillStyle = color; ctx.fillRect(-6, -66, 12, 14);
+  }
+  ctx.restore();
+}
+function drawPins(t, c) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  const r = toScreen(c, RESTAURANT), h = toScreen(c, HOUSE);
+  const kr = prog(t, T.pinR, T.pinR + 0.35), kh = prog(t, T.pinH, T.pinH + 0.35);
+  drawPin(r.x, r.y, kr < 1 ? outBack(kr, 2.2) : 1, INK, 'cloche');
+  // pulinho quando a moto entra na reta final, quique quando ela chega
+  const hop = 46 * bump(t, T.near, 0.35);
+  const kb = prog(t, T.arr, T.arr + 0.6);
+  const squash = kb > 0 && kb < 1 ? 1 + 0.22 * Math.sin(kb * Math.PI * 3) * (1 - kb) : 1;
+  drawPin(h.x, h.y - hop, (kh < 1 ? outBack(kh, 2.2) : 1) * squash, ACC, 'house');
+}
+
+function drawRing(t, c) {
+  const k = prog(t, T.arr, T.arr + 0.7);
+  if (k <= 0 || k >= 1) return;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  const h = toScreen(c, HOUSE), r = lerp(24, 230, outCubic(k));
+  ctx.beginPath();
+  ctx.ellipse(h.x, h.y, r, r * 0.45, 0, 0, Math.PI * 2);
+  ctx.strokeStyle = ACC;
+  ctx.globalAlpha = 1 - k;
+  ctx.lineWidth = lerp(10, 2, k);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+
+function scooter(body = ACC, dark = INK, light = PAPER, wheelSpin = 0) {
+  // moto de entrega de lado, virada para a direita (centro do selo = 0,0)
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = dark; ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.moveTo(22, -10); ctx.lineTo(23, 17); ctx.stroke();               // garfo
+  ctx.fillStyle = dark; ctx.beginPath(); ctx.roundRect(-28, -31, 24, 25, 4); ctx.fill();  // baú
+  ctx.strokeStyle = light; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(-28, -21); ctx.lineTo(-4, -21); ctx.stroke();
+  ctx.fillStyle = dark; ctx.beginPath(); ctx.roundRect(-22, -7, 22, 7, 3); ctx.fill();    // banco
+  ctx.fillStyle = body;                                                                   // carenagem
+  ctx.beginPath();
+  [[-26, 0], [-2, 0], [2, 8], [12, 8], [17, -14], [24, -14], [23, -6], [20, 14], [-22, 14]]
+    .forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = dark; ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.moveTo(16, -16); ctx.lineTo(29, -20); ctx.stroke();               // guidão
+  for (const wx of [-15, 23]) {                                                           // rodas
+    ctx.fillStyle = dark; ctx.beginPath(); ctx.arc(wx, 18, 10.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = light;
+    ctx.beginPath(); ctx.arc(wx + Math.cos(wheelSpin) * 4, 18 + Math.sin(wheelSpin) * 4, 3, 0, Math.PI * 2); ctx.fill();
+  }
+}
+function motoScreen(t, c) {
+  return toScreen(c, at(travel(t)));
+}
+function drawMoto(t, c) {
+  const kIn = prog(t, T.moto, T.moto + 0.3);
+  if (kIn <= 0) return;
+  const p = travel(t), s0 = toScreen(c, at(p));
+  let s = kIn < 1 ? outBack(kIn, 2.4) : 1;
+  s *= 1 - inBack(prog(t, T.arr, T.arr + 0.22));
+  if (s <= 0.01) return;
+  // estica na arrancada, inclina nas curvas
+  const stretch = 0.14 * (1 - outCubic(prog(t, T.dep, T.dep + 0.35))) * (t >= T.dep ? 1 : 0);
+  const dir = heading(p);
+  const turn = heading(Math.min(1, p + 0.02)) - heading(Math.max(0, p - 0.02));
+  const tilt = clamp(turn * 0.6, -0.28, 0.28) * speed01(t);
+  const bob = t > T.dep && t < T.arr ? Math.sin((t - T.dep) * Math.PI * 2 * 4) * 1.5 : 0;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.save();
+  ctx.translate(s0.x, s0.y + bob);
+  ctx.rotate(dir);
+  ctx.scale(s * (1 + stretch), s * (1 - stretch * 0.7));
+  ctx.rotate(-dir);
+  shadow(18, 6, 0.25);
+  ctx.beginPath(); ctx.arc(0, 0, 48, 0, Math.PI * 2); ctx.fillStyle = PAPER; ctx.fill();
+  noShadow();
+  ctx.lineWidth = 6; ctx.strokeStyle = ACC; ctx.stroke();
+  ctx.rotate(tilt);
+  ctx.scale(0.95, 0.95);
+  ctx.translate(-2, -1);
+  scooter(ACC, INK, PAPER, travel(t) * 260);
+  ctx.restore();
+}
+
+function drawBubble(t, c) {
+  const [t0, t1] = T.bubble;
+  const kIn = prog(t, t0, t0 + 0.3), kOut = prog(t, t1 - 0.25, t1);
+  if (kIn <= 0 || kOut >= 1) return;
+  const s = (kIn < 1 ? outBack(kIn, 2) : 1) * (1 - inBack(kOut));
+  const m = motoScreen(t, c);
+  const w = 520, h = 98, tipY = m.y - 58, cx = clamp(m.x, w / 2 + 40, W - w / 2 - 40);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.save();
+  ctx.translate(m.x, tipY);
+  ctx.scale(s, s);
+  ctx.translate(-m.x, -tipY);
+  shadow(24, 8, 0.18);
+  ctx.fillStyle = PAPER;
+  ctx.beginPath(); ctx.roundRect(cx - w / 2, tipY - 14 - h, w, h, h / 2); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(m.x - 16, tipY - 16); ctx.lineTo(m.x, tipY); ctx.lineTo(m.x + 16, tipY - 16); ctx.fill();
+  noShadow();
+  font(600, 36, UI);
+  ctx.textBaseline = 'middle';
+  text('Já saí! Chego rapidinho', cx, tipY - 14 - h / 2 + 1, INK, 'center');
+  ctx.textBaseline = 'alphabetic';
+  ctx.restore();
+}
+
+// --- painel inferior
+const SHEET_Y = 1250;
+function counterValue(t) {
+  const step = BEAT / 2;
+  const n = t < T.dep ? 0 : Math.min(20, Math.floor((t - T.dep) / step + 1e-6));
+  return { v: 20 - n, prev: 21 - n, tChange: T.dep + n * step, changed: n > 0 };
+}
+function drawCounter(t, oy) {
+  const { v, prev, tChange, changed } = counterValue(t);
+  const k = changed ? outCubic(clamp((t - tChange) / 0.09)) : 1;
+  const color = t < T.near ? INK : ACC;
+  const base = 1578 + oy, x0 = 80;
+  font(700, 250, TITLE, 'condensed');
+  const cw = Math.max(...'0123456789'.split('').map((d) => ctx.measureText(d).width));
+  const tens = (n) => (n >= 10 ? String(Math.floor(n / 10)) : null);
+  const wT = v >= 10 ? 1 : changed && prev >= 10 ? 1 - k : 0;
+  ctx.save();
+  const punch = 1 + 0.12 * bump(t, T.arr, 0.25);
+  ctx.translate(x0, base); ctx.scale(punch, punch); ctx.translate(-x0, -base);
+  ctx.save();
+  clipRect(60, 1366 + oy, 620, 250);
+  const column = (oldD, newD, x) => {
+    if (oldD === newD || !changed || k >= 1) {
+      if (newD !== null) text(newD, x + cw / 2, base, color, 'center');
+      return;
+    }
+    if (oldD !== null) text(oldD, x + cw / 2, base - 250 * k, color, 'center');
+    if (newD !== null) text(newD, x + cw / 2, base + 250 * (1 - k), color, 'center');
+  };
+  column(changed ? tens(prev) : tens(v), tens(v), x0);
+  column(changed ? String(prev % 10) : String(v % 10), String(v % 10), x0 + cw * wT);
+  ctx.restore();
+  font(600, 84, TITLE, 'condensed');
+  text('min', x0 + cw * wT + cw + 18, base, color);
+  ctx.restore();
+}
+function drawSteps(t, oy, p) {
+  const y = 1652 + oy, xs = [110, 540, 970];
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = LINE; ctx.lineWidth = 8;
+  ctx.beginPath(); ctx.moveTo(xs[0], y); ctx.lineTo(xs[2], y); ctx.stroke();
+  const f1 = outCubic(prog(t, T.dep, T.dep + 0.25));
+  const fx = f1 < 1 ? lerp(xs[0], xs[1], f1) : lerp(xs[1], xs[2], p);
+  if (t >= T.dep) {
+    ctx.strokeStyle = ACC;
+    ctx.beginPath(); ctx.moveTo(xs[0], y); ctx.lineTo(fx, y); ctx.stroke();
+  }
+  const starts = [null, T.dep + 0.25, T.arr];
+  ['Confirmado', 'A caminho', 'Entregue'].forEach((label, i) => {
+    const k = starts[i] === null ? 1 : prog(t, starts[i], starts[i] + 0.3);
+    ctx.beginPath(); ctx.arc(xs[i], y, 19, 0, Math.PI * 2);
+    ctx.fillStyle = PAPER; ctx.fill(); ctx.strokeStyle = LINE; ctx.lineWidth = 6; ctx.stroke();
+    if (k > 0) {
+      ctx.beginPath(); ctx.arc(xs[i], y, 22 * (k < 1 ? outBack(k, 2.5) : 1), 0, Math.PI * 2);
+      ctx.fillStyle = ACC; ctx.fill();
+      check(xs[i], y, 1, PAPER, 4.5, outCubic(prog(k, 0.3, 1)));
+    }
+    font(600, 33, UI);
+    text(label, xs[i], 1716 + oy, k >= 0.5 ? INK : INK2, 'center');
+  });
+}
+function star(cx, cy, R) {
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI / 2 + (i * Math.PI) / 5, r = i % 2 ? R * 0.45 : R;
+    ctx.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+  }
+  ctx.closePath();
+}
+function drawPersonRow(t, oy) {
+  const y = 1838 + oy;
+  ctx.beginPath(); ctx.arc(124, y, 44, 0, Math.PI * 2); ctx.fillStyle = INK; ctx.fill();
+  font(700, 30, UI); ctx.textBaseline = 'middle'; text('CA', 124, y + 1, PAPER, 'center'); ctx.textBaseline = 'alphabetic';
+  const k = inOutCubic(prog(t, T.rate, T.rate + 0.3));
+  ctx.save();
+  clipRect(186, y - 70, W - 186, 140);
+  // entregador -> avaliação (desliza para a esquerda)
+  ctx.translate(-(W - 186) * k, 0);
+  font(700, 38, UI); text('Carlos Almeida', 196, y - 6, INK);
+  font(400, 32, UI); text('Honda Biz · nota 4,9', 196, y + 38, INK2);
+  ctx.beginPath(); ctx.arc(956, y, 42, 0, Math.PI * 2); ctx.fillStyle = ACC; ctx.fill();
+  ctx.fillStyle = PAPER;
+  ctx.beginPath(); ctx.roundRect(936, y - 15, 40, 27, 9); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(944, y + 9); ctx.lineTo(941, y + 22); ctx.lineTo(956, y + 10); ctx.fill();
+  ctx.translate(W - 186, 0);
+  font(700, 38, UI); text('Como foi a entrega?', 196, y - 6, INK);
+  font(400, 32, UI); text('Avalie o Carlos', 196, y + 38, INK2);
+  for (let i = 0; i < 5; i++) {
+    const cx = 700 + i * 66, ks = prog(t, T.rate + 0.25 + i * 0.125, T.rate + 0.25 + i * 0.125 + 0.2);
+    star(cx, y, 27); ctx.strokeStyle = LINE; ctx.lineWidth = 4; ctx.lineJoin = 'round'; ctx.stroke();
+    if (ks > 0) {
+      const ss = ks < 1 ? outBack(ks, 3) : 1;
+      star(cx, y, 27 * ss); ctx.fillStyle = ACC; ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+function drawSheet(t, p) {
+  const k = prog(t, ...T.sheet);
+  if (k <= 0) return;
+  const oy = lerp(H - SHEET_Y + 40, 0, outBack(k, 1.1));
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  shadow(40, -6, 0.14);
+  ctx.fillStyle = PAPER;
+  ctx.beginPath(); ctx.roundRect(0, SHEET_Y + oy, W, H, [44, 44, 0, 0]); ctx.fill();
+  noShadow();
+  ctx.fillStyle = LINE;
+  ctx.beginPath(); ctx.roundRect(W / 2 - 40, SHEET_Y + 20 + oy, 80, 10, 5); ctx.fill();
+
+  font(600, 36, UI); text('Tempo restante', 80, 1348 + oy, INK2);
+  drawCounter(t, oy);
+  font(700, 40, UI); text('Burger da Vila', 1000, 1424 + oy, INK, 'right');
+  font(400, 34, UI);
+  text('1× Combo Smash', 1000, 1472 + oy, INK2, 'right');
+  text('2× Refrigerante', 1000, 1516 + oy, INK2, 'right');
+  drawSteps(t, oy, p);
+  ctx.fillStyle = LINE; ctx.fillRect(80, 1754 + oy, 920, 2);
+  drawPersonRow(t, oy);
+}
+
+// --- chip de status (nasce da tela laranja)
+const CHIP = { x0: 210, y0: 62, x1: 870, y1: 162, r: 50 };
+function drawChip(t) {
+  if (t < T.morph[1]) return;
+  let i = 0;
+  while (i + 1 < STATUS.length && STATUS[i + 1][0] <= t) i++;
+  const tc = STATUS[i][0], k = outCubic(prog(t, tc, tc + 0.25));
+  const s = 1 + 0.05 * bump(t, tc, 0.3);
+  const cx = (CHIP.x0 + CHIP.x1) / 2, cy = (CHIP.y0 + CHIP.y1) / 2;
+  ctx.setTransform(s, 0, 0, s, cx - cx * s, cy - cy * s);
+  shadow(20, 6, 0.2);
+  ctx.fillStyle = ACC;
+  ctx.beginPath(); ctx.roundRect(CHIP.x0, CHIP.y0, CHIP.x1 - CHIP.x0, CHIP.y1 - CHIP.y0, CHIP.r); ctx.fill();
+  noShadow();
+  ctx.save();
+  clipRect(CHIP.x0, CHIP.y0, CHIP.x1 - CHIP.x0, CHIP.y1 - CHIP.y0);
+  font(600, 40, UI);
+  ctx.textBaseline = 'middle';
+  if (i > 0 && k < 1) text(STATUS[i - 1][1], cx, cy - 60 * k, PAPER, 'center');
+  text(STATUS[i][1], cx, cy + 60 * (1 - k), PAPER, 'center');
+  ctx.textBaseline = 'alphabetic';
+  ctx.restore();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+}
+
+// --- gancho: tela laranja de confirmação
+function reveal(s, x, y, size, weight, family, stretch, k, color) {
+  // texto que sobe de dentro de uma máscara (nada de fade)
+  if (k <= 0) return;
+  ctx.save();
+  clipRect(0, y - size * 0.95, W, size * 1.25);
+  font(weight, size, family, stretch);
+  text(s, x, y + size * 1.1 * (1 - outCubic(k)), color);
+  ctx.restore();
+}
+function drawHook(t) {
+  if (t >= T.morph[1]) return;
+  const km = inOutCubic(prog(t, ...T.morph));
+  const x0 = lerp(0, CHIP.x0, km), y0 = lerp(0, CHIP.y0, km), x1 = lerp(W, CHIP.x1, km);
+  const y1 = lerp(H, CHIP.y1, inOutCubic(prog(t, T.morph[0], T.morph[1] - 0.05)));
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.save();
+  if (km > 0) shadow(30, 10, 0.2 * km);
+  ctx.fillStyle = ACC;
+  ctx.beginPath(); ctx.roundRect(x0, y0, x1 - x0, Math.max(y1 - y0, 88), lerp(0, CHIP.r, km)); ctx.fill();
+  noShadow();
+  ctx.beginPath(); ctx.roundRect(x0, y0, x1 - x0, Math.max(y1 - y0, 88), lerp(0, CHIP.r, km)); ctx.clip();
+  // o conteúdo sobe e sai antes de o retângulo virar chip (nada de letras cortadas dentro dele)
+  ctx.translate(0, -1400 * inCubic(prog(t, T.morph[0], T.morph[0] + 0.25)));
+
+  // selo com check
+  const cx = 200, cy = 560;
+  const ks = prog(t, T.checkPop, T.checkPop + 0.42);
+  const sr = 120 * (ks < 1 ? outBack(ks, 2) : 1);
+  ctx.beginPath(); ctx.arc(cx, cy, Math.max(0, sr), 0, Math.PI * 2); ctx.fillStyle = PAPER; ctx.fill();
+  const kr = inOutCubic(prog(t, 0.125, 0.625));
+  if (kr > 0) {
+    ctx.beginPath(); ctx.arc(cx, cy, 152, -Math.PI / 2, -Math.PI / 2 + kr * Math.PI * 2);
+    ctx.strokeStyle = PAPER; ctx.lineWidth = 6; ctx.lineCap = 'round'; ctx.stroke();
+  }
+  drawPartial([[cx - 52, cy + 4], [cx - 14, cy + 42], [cx + 58, cy - 44]], inOutCubic(prog(t, ...T.check)), ACC, 26);
+
+  // título alinhado à esquerda, entrando por máscara
+  reveal('Pedido', 74, 900, 210, 700, TITLE, 'condensed', prog(t, T.line1, T.line1 + 0.3), PAPER);
+  reveal('confirmado', 74, 1090, 210, 700, TITLE, 'condensed', prog(t, T.line2, T.line2 + 0.3), PAPER);
+  // a linha vira estrada: uma motinho puxa o traço da esquerda para a direita (prévia da viagem)
+  const kr2 = inOutCubic(prog(t, ...T.road)), roadY = 1178;
+  if (t >= T.road[0]) {
+    const mx = lerp(80, 1000, kr2);
+    ctx.fillStyle = PAPER; ctx.fillRect(80, roadY - 3, mx - 80, 6);
+    ctx.save();
+    ctx.translate(Math.min(mx, 960), roadY - 39);
+    ctx.rotate(-0.12 * Math.sin(Math.PI * kr2));
+    ctx.scale(1.3, 1.3);
+    scooter(PAPER, INK, ACC, kr2 * 40);
+    ctx.restore();
+  }
+  reveal('Chega em 20 min', 80, 1258, 60, 700, UI, 'normal', prog(t, T.eta, T.eta + 0.28), PAPER);
+  reveal('Burger da Vila · pedido #4821', 80, 1326, 40, 400, UI, 'normal', prog(t, T.meta, T.meta + 0.28), '#FFE3D6');
+  ctx.restore();
+}
+
+function draw(t) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 1;
+  noShadow();
+  const c = camera(t), p = travel(t);
+  drawMap(c);
+  drawRoute(t, c, p);
+  drawRing(t, c);
+  // a moto sai de trás do alfinete do restaurante e some atrás do alfinete da casa
+  const behind = t < T.dep + 0.3 || t > T.arr - 0.35;
+  if (behind) drawMoto(t, c);
+  drawPins(t, c);
+  if (!behind) drawMoto(t, c);
+  drawBubble(t, c);
+  drawSheet(t, p);
+  drawChip(t);
+  drawHook(t);
+}
+
+window.seek = async (t) => {
+  await fontsReady;
+  draw(t);
+};
+
+// ---------------------------------------------------------------- trilha (sintetizada, 120 BPM)
+const MIDI = { C2: 36, F2: 41, G2: 43, A2: 45, C3: 48, F3: 53, G3: 55, A3: 57,
+  C5: 72, D5: 74, E5: 76, F5: 77, G5: 79, A5: 81, B5: 83, C6: 84, D6: 86, E6: 88, F6: 89, G6: 91, A6: 93, C7: 96, E7: 100 };
+const hz = (n) => 440 * 2 ** ((MIDI[n] - 69) / 12);
+
+window.renderAudio = async (sr) => {
+  const ac = new OfflineAudioContext(2, Math.ceil(DUR * sr), sr);
+  const rnd = mulberry32(0xc0ffee);
+  const noise = ac.createBuffer(1, sr * 3, sr);
+  { const d = noise.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = rnd() * 2 - 1; }
+
+  const comp = new DynamicsCompressorNode(ac, { threshold: -16, knee: 8, ratio: 3, attack: 0.004, release: 0.12 });
+  comp.connect(ac.destination);
+  const bus = new GainNode(ac, { gain: 0.7 }); bus.connect(comp);
+  const echo = new DelayNode(ac, { delayTime: BEAT * 0.75, maxDelayTime: 1 });
+  const fb = new GainNode(ac, { gain: 0.28 }), wet = new GainNode(ac, { gain: 0.3 });
+  echo.connect(fb).connect(echo); echo.connect(wet).connect(bus);
+
+  const send = (node, pan = 0, fx = 0) => {
+    const p = new StereoPannerNode(ac, { pan }); node.connect(p).connect(bus);
+    if (fx) p.connect(new GainNode(ac, { gain: fx })).connect(echo);
+  };
+  const env = (t, a, d, v) => {
+    const g = new GainNode(ac, { gain: 0 });
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v, t + a); g.gain.exponentialRampToValueAtTime(1e-4, t + a + d);
+    return g;
+  };
+  const noiseAt = (t, d) => {
+    const s = new AudioBufferSourceNode(ac, { buffer: noise });
+    s.start(t, (t * 0.37) % 2); s.stop(t + d);
+    return s;
+  };
+  const osc = (type, freq, t, d) => { const o = new OscillatorNode(ac, { type, frequency: freq }); o.start(t); o.stop(t + d); return o; };
+
+  const kick = (t, v = 0.9) => {
+    const o = osc('sine', 160, t, 0.4);
+    o.frequency.setValueAtTime(160, t); o.frequency.exponentialRampToValueAtTime(46, t + 0.12);
+    const g = env(t, 0.002, 0.34, v); o.connect(g); send(g);
+  };
+  const hat = (t, v = 0.1, d = 0.045, pan = 0.18) => {
+    const hp = new BiquadFilterNode(ac, { type: 'highpass', frequency: 7500 });
+    const g = env(t, 0.001, d, v); noiseAt(t, d + 0.03).connect(hp).connect(g); send(g, pan);
+  };
+  const clap = (t, v = 0.34) => {
+    const bp = new BiquadFilterNode(ac, { type: 'bandpass', frequency: 1600, Q: 0.9 });
+    const g = new GainNode(ac, { gain: 0 });
+    for (const o of [0, 0.011, 0.022]) { g.gain.setValueAtTime(v, t + o); g.gain.exponentialRampToValueAtTime(v * 0.25, t + o + 0.009); }
+    g.gain.setValueAtTime(v * 0.8, t + 0.03); g.gain.exponentialRampToValueAtTime(1e-4, t + 0.24);
+    noiseAt(t, 0.3).connect(bp).connect(g); send(g, -0.12, 0.12);
+  };
+  const bell = (t, n, v = 0.1, d = 1.4, pan = 0, fx = 0.35) => {
+    const f = hz(n), car = osc('sine', f, t, d + 0.1), mod = osc('sine', f * 3.5, t, d + 0.1);
+    const mg = new GainNode(ac, { gain: 0 });
+    mg.gain.setValueAtTime(f * 2.2, t); mg.gain.exponentialRampToValueAtTime(f * 0.05, t + 0.4);
+    mod.connect(mg).connect(car.frequency);
+    const g = env(t, 0.003, d, v); car.connect(g); send(g, pan, fx);
+  };
+  const pluck = (t, n, v = 0.13, d = 0.38, pan = 0) => {
+    const o = osc('sawtooth', hz(n), t, d + 0.05);
+    const lp = new BiquadFilterNode(ac, { type: 'lowpass', Q: 4, frequency: 4500 });
+    lp.frequency.setValueAtTime(4500, t); lp.frequency.exponentialRampToValueAtTime(350, t + d);
+    const g = env(t, 0.002, d, v); o.connect(lp).connect(g); send(g, pan, 0.25);
+  };
+  const bass = (t, n, d = 0.2, v = 0.3) => {
+    const o = osc('sawtooth', hz(n), t, d + 0.05), sub = osc('sine', hz(n), t, d + 0.05);
+    const lp = new BiquadFilterNode(ac, { type: 'lowpass', frequency: 420, Q: 1.2 });
+    const g = env(t, 0.004, d, v); o.connect(lp).connect(g); sub.connect(g); send(g);
+  };
+  const pop = (t, f0 = 1100, f1 = 300, v = 0.28, pan = 0) => {
+    const o = osc('sine', f0, t, 0.15);
+    o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + 0.07);
+    const g = env(t, 0.002, 0.11, v); o.connect(g); send(g, pan, 0.1);
+  };
+  const swish = (t, v = 0.14, d = 0.2, pan = 0) => {   // começa NA batida, ataque curto
+    const bp = new BiquadFilterNode(ac, { type: 'bandpass', Q: 1.3, frequency: 900 });
+    bp.frequency.setValueAtTime(900, t); bp.frequency.exponentialRampToValueAtTime(6000, t + d);
+    const g = env(t, 0.012, d, v); noiseAt(t, d + 0.05).connect(bp).connect(g); send(g, pan);
+  };
+  const riser = (t0, t1, v = 0.16) => {                // termina NA batida, corte seco
+    const bp = new BiquadFilterNode(ac, { type: 'bandpass', Q: 1.6, frequency: 300 });
+    bp.frequency.setValueAtTime(300, t0); bp.frequency.exponentialRampToValueAtTime(7000, t1);
+    const g = new GainNode(ac, { gain: 0 });
+    g.gain.setValueAtTime(1e-4, t0); g.gain.exponentialRampToValueAtTime(v, t1 - 0.01); g.gain.setValueAtTime(0, t1);
+    noiseAt(t0, t1 - t0 + 0.02).connect(bp).connect(g); send(g);
+  };
+  const crash = (t, v = 0.2) => {
+    const hp = new BiquadFilterNode(ac, { type: 'highpass', frequency: 3500 });
+    const g = env(t, 0.002, 1.6, v); noiseAt(t, 1.7).connect(hp).connect(g); send(g, 0, 0.15);
+  };
+  const engine = (t0, t1) => {
+    const curve = new Float32Array(200);
+    for (let i = 0; i < curve.length; i++) curve[i] = 46 + 38 * speed01(lerp(t0, t1, i / (curve.length - 1)));
+    const o1 = osc('sawtooth', 46, t0, t1 - t0), o2 = osc('square', 23, t0, t1 - t0);
+    o1.frequency.setValueCurveAtTime(curve, t0, t1 - t0);
+    o2.frequency.setValueCurveAtTime(curve.map((v) => v / 2), t0, t1 - t0);
+    const lp = new BiquadFilterNode(ac, { type: 'lowpass', frequency: 520, Q: 3 });
+    const g = new GainNode(ac, { gain: 0 });
+    g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(0.07, t0 + 0.06);
+    g.gain.setValueAtTime(0.07, t1 - 0.05); g.gain.linearRampToValueAtTime(0, t1);
+    o1.connect(lp); o2.connect(lp); lp.connect(g); send(g, 0.05);
+  };
+
+  const vroom = (t0, t1) => {                          // motinho do gancho cruzando a linha
+    const o = osc('sawtooth', 70, t0, t1 - t0 + 0.05);
+    o.frequency.setValueAtTime(70, t0); o.frequency.exponentialRampToValueAtTime(150, lerp(t0, t1, 0.55));
+    o.frequency.exponentialRampToValueAtTime(95, t1);
+    const lp = new BiquadFilterNode(ac, { type: 'lowpass', frequency: 700, Q: 2 });
+    const g = new GainNode(ac, { gain: 0 });
+    g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(0.06, t0 + 0.04);
+    g.gain.setValueAtTime(0.06, t1 - 0.12); g.gain.linearRampToValueAtTime(0, t1);
+    o.connect(lp).connect(g); send(g, 0.1);
+  };
+
+  // 0-2 s: gancho
+  kick(0, 1); pop(0, 1400, 420, 0.3);
+  ['C5', 'E5', 'G5', 'B5'].forEach((n, i) => bell(0, n, 0.08, 1.6, -0.3 + i * 0.2));
+  swish(T.line1); pluck(T.line1, 'C6', 0.1, 0.3, -0.2);
+  swish(T.line2, 0.12); pluck(T.line2, 'E6', 0.1, 0.3, 0.2);
+  vroom(...T.road); pluck(T.road[0], 'G5', 0.1, 0.25, -0.3);
+  bell(T.eta, 'G6', 0.09, 0.9); hat(T.eta, 0.08);
+  pop(T.meta, 900, 500, 0.16);
+  riser(b(2.5), b(4));
+
+  // 2-3 s: mapa, rota e alfinetes
+  kick(b(4), 1); crash(b(4), 0.12); bass(b(4), 'F2', 0.9, 0.34);
+  ['F5', 'A5', 'C6'].forEach((n, i) => bell(b(4), n, 0.06, 1.2, -0.2 + i * 0.2));
+  [['A5', 4], ['C6', 4.5], ['F6', 5]].forEach(([n, at_]) => pluck(b(at_), n, 0.11, 0.3));
+  pop(T.pinR, 1000, 280, 0.26, -0.25);
+  pop(T.pinH, 1200, 330, 0.26, 0.25);
+  pop(T.moto, 1500, 420, 0.24);
+
+  // 3-8 s: viagem - bumbo nas batidas, chimbal nas colcheias (cada colcheia derruba 1 min)
+  engine(T.dep, T.arr);
+  bell(T.dep, 'C6', 0.07, 0.6);
+  const roots = (t) => (t < b(8) ? 'F2' : t < b(12) ? 'G2' : t < b(14) ? 'A2' : 'G2');
+  const octave = { F2: 'F3', G2: 'G3', A2: 'A3' };
+  for (let n = 12; n < 32; n++) {                     // colcheias de 3,0 a 7,75 s
+    const t = n * BEAT / 2, onBeat = n % 2 === 0;
+    if (onBeat) kick(t, 0.8);
+    hat(t, onBeat ? 0.06 : 0.1);
+    bass(t, onBeat ? roots(t) : octave[roots(t)], 0.2, onBeat ? 0.3 : 0.2);
+  }
+  bell(T.bubble[0], 'D6', 0.09, 0.7, 0.2); bell(T.bubble[0] + BEAT / 4, 'G6', 0.09, 0.9, 0.2);
+  pop(T.bubble[1] - 0.25, 700, 220, 0.14);
+  clap(T.near); bell(T.near, 'E6', 0.08, 0.8);
+  clap(b(13)); clap(b(15));
+  for (let n = 60; n < 64; n++) hat(n * BEAT / 4, 0.05 + 0.02 * (n - 60), 0.03, -0.15);   // semicolcheias 7,5-8,0
+  riser(b(14), b(16), 0.12);
+
+  // 8 s: chegada e resolução em dó
+  kick(T.arr, 1); crash(T.arr, 0.24); bass(T.arr, 'C2', 1.6, 0.36);
+  ['C5', 'E5', 'G5', 'C6', 'E6'].forEach((n, i) => bell(T.arr, n, 0.08, 1.8, -0.4 + i * 0.2));
+  bell(b(17), 'G5', 0.06, 0.8);
+
+  // 9 s: avaliação, uma estrela por semicolcheia
+  swish(T.rate, 0.1);
+  ['E6', 'G6', 'A6', 'C7', 'E7'].forEach((n, i) => bell(T.rate + 0.25 + i * 0.125, n, 0.08, 0.6, -0.3 + i * 0.15, 0.2));
+
+  return ac.startRendering();
+};
+</script>
+</html>

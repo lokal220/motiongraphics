@@ -19,6 +19,8 @@
  *   --out arquivo.mp4     destino do MP4
  *   --beats beats.json    grade de batidas (padrão: beats.json na pasta do filme, senão FILM.beats)
  *   --audio musica.mp3    usa essa música em vez de window.renderAudio
+ *   --formato vertical    abre o filme com ?formato=vertical (a página monta FILM e a composição
+ *                         para esse formato) e acrescenta "-vertical" ao nome da saída
  *
  * Saída: H.264 yuv420p CRF 16, BT.709, áudio AAC normalizado em -14 LUFS (pico -1 dBTP).
  * Folhas de contato e quadros soltos vão para .render-tmp/<nome>/.
@@ -46,6 +48,7 @@ const { values: opt, positionals } = parseArgs({
     som: { type: 'boolean' },
     beats: { type: 'string' },
     audio: { type: 'string' },
+    formato: { type: 'string' },
     help: { type: 'boolean', short: 'h' },
   },
 });
@@ -201,7 +204,9 @@ async function openFilm(browser, file) {
   page.on('pageerror', (e) => errors.push(`erro na página: ${e.message}`));
   page.on('console', (m) => m.type() === 'error' && console.warn(`  [página] ${m.text()}`));
   await page.evaluateOnNewDocument(renderGuard);
-  await page.goto(pathToFileURL(file).href, { waitUntil: 'networkidle0' });
+  const url = pathToFileURL(file);
+  if (opt.formato) url.searchParams.set('formato', opt.formato);
+  await page.goto(url.href, { waitUntil: 'networkidle0' });
 
   const info = await page.evaluate(() => ({
     FILM: window.FILM ?? null,
@@ -362,14 +367,14 @@ async function launchBrowser() {
 
 async function main() {
   if (opt.help || positionals.length !== 1) {
-    console.log('Uso: node render.mjs <filme.html> [--sheet | --frames 0,1.5 | --som] [--out x.mp4] [--beats b.json] [--audio m.mp3]');
+    console.log('Uso: node render.mjs <filme.html> [--sheet | --frames 0,1.5 | --som] [--out x.mp4] [--beats b.json] [--audio m.mp3] [--formato vertical]');
     process.exitCode = opt.help ? 0 : 1;
     return;
   }
   const file = path.resolve(positionals[0]);
   if (!existsSync(file)) throw new Error(`Filme não encontrado: ${positionals[0]}`);
   const base = path.basename(file, path.extname(file));
-  const name = base === 'index' ? path.basename(path.dirname(file)) : base;
+  const name = (base === 'index' ? path.basename(path.dirname(file)) : base) + (opt.formato ? `-${opt.formato}` : '');
   const tmp = path.join(ROOT, '.render-tmp', name);
   await mkdir(tmp, { recursive: true });
   if (!opt.sheet && !opt.frames) FFMPEG = findFfmpeg();

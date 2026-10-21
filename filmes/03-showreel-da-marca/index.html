@@ -1,0 +1,669 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<title>03 - VAI DE LOKAL</title>
+<!--
+  Filme de marca da VAI DE LOKAL, 15 s, 8 compassos a 128 BPM (1 compasso = 1,875 s).
+  Uma linha do tempo, duas composições: ?formato=vertical (1080x1920, Reels/stories) ou padrão (1920x1080).
+  Só textos, cores, fontes, logo e telas reais do site (arquivos em ../../assets). Telas reais recortadas.
+  Curvas de movimento da própria marca (variáveis --ease-out e --ease-spring do site).
+  Render: node render.mjs filmes/03-showreel-da-marca/index.html [--formato vertical]
+-->
+<style>
+  @font-face { font-family: 'DM Sans'; src: url('../../assets/fonts/DMSans-variavel-latin.woff2') format('woff2'); font-weight: 100 1000; }
+  @font-face { font-family: 'DM Mono'; src: url('../../assets/fonts/DMMono-500-latin.woff2') format('woff2'); font-weight: 500; }
+  html, body { margin: 0; background: #FFF8F1; }
+  canvas { display: block; }
+</style>
+<canvas id="c"></canvas>
+<script>
+'use strict';
+
+// ---------------------------------------------------------------- formato e tempo
+const V = new URLSearchParams(location.search).get('formato') === 'vertical';
+const W = V ? 1080 : 1920, H = V ? 1920 : 1080;
+const FPS = 30, DUR = 15, BPM = 128, BEAT = 60 / BPM, BAR = 4 * BEAT, E8 = BEAT / 2, S16 = BEAT / 4;
+window.FILM = { width: W, height: H, fps: FPS, duration: DUR };
+
+// ---------------------------------------------------------------- marca (variáveis CSS do site)
+const OR = '#EA6E1A', OR_D = '#C05810', OR_P = '#FFF0E8', INK = '#2A1F18', INK2 = '#6B5C4E', INK3 = '#A8957F';
+const CREAM = '#FFF8F1', WHITE = '#FFFFFF', GREEN = '#1D9E75', LINE = 'rgba(42,31,24,0.10)';
+const SANS = '"DM Sans"', MONO = '"DM Mono"';
+// pin do símbolo (icon.svg), em caixa 100x100: furo centrado em (50, 40), ponta em (50, 78)
+const PIN = new Path2D('M50 22c-10 0-18 8-18 18 0 13 18 38 18 38s18-25 18-38c0-10-8-18-18-18zm0 25a7 7 0 1 1 0-14 7 7 0 0 1 0 14z');
+// furo do "O" do logo-lokal.png (320x154), medido nos pixels: centro (87,5; 93), raio ~17
+const LOGO_O = { x: 87.5, y: 93, r: 17 };
+
+// ---------------------------------------------------------------- utilidades puras
+const clamp = (x, a = 0, z = 1) => Math.min(z, Math.max(a, x));
+const prog = (t, a, z) => clamp((t - a) / (z - a));
+const lerp = (a, z, k) => a + (z - a) * k;
+const inCubic = (k) => k ** 3;
+const inOutCubic = (k) => (k < 0.5 ? 4 * k ** 3 : 1 - (-2 * k + 2) ** 3 / 2);
+const bump = (t, a, d) => Math.sin(Math.PI * prog(t, a, a + d));
+function cubicBezier(x1, y1, x2, y2) {
+  const bz = (a, b, t) => 3 * a * (1 - t) ** 2 * t + 3 * b * (1 - t) * t * t + t ** 3;
+  return (x) => {
+    if (x <= 0) return 0;
+    if (x >= 1) return 1;
+    let lo = 0, hi = 1, t = x;
+    for (let i = 0; i < 24; i++) { t = (lo + hi) / 2; bz(x1, x2, t) < x ? (lo = t) : (hi = t); }
+    return bz(y1, y2, t);
+  };
+}
+const easeOut = cubicBezier(0.22, 1, 0.36, 1);      // --ease-out do site
+const spring = cubicBezier(0.34, 1.4, 0.64, 1);     // --ease-spring do site
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// ---------------------------------------------------------------- arquivos
+const cv = document.getElementById('c');
+cv.width = W; cv.height = H;
+const ctx = cv.getContext('2d');
+const IMG = {};
+const assetsReady = Promise.all(Object.entries({
+  logo: '../../assets/logo-lokal.png', enc: '../../assets/app-tela-encomenda.webp',
+  ret: '../../assets/app-tela-retirada.webp', cart: '../../assets/app-tela-carteira.webp',
+}).map(([k, src]) => new Promise((res, rej) => {
+  const im = new Image();
+  im.onload = () => res();
+  im.onerror = () => rej(new Error(`não carregou ${src}`));
+  im.src = src;
+  IMG[k] = im;
+})).concat([400, 500, 700, 800].map((w) => document.fonts.load(`${w} 80px ${SANS}`)), [document.fonts.load(`500 80px ${MONO}`)]));
+
+// ---------------------------------------------------------------- desenho básico
+function font(weight, size, fam = SANS) { ctx.font = `${weight} ${size}px ${fam}`; }
+function text(s, x, y, color, align = 'left') { ctx.fillStyle = color; ctx.textAlign = align; ctx.fillText(s, x, y); }
+function clipRect(x, y, w, h) { ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip(); }
+function shadow(blur, dy, a) { ctx.shadowColor = `rgba(42,31,24,${a})`; ctx.shadowBlur = blur; ctx.shadowOffsetY = dy; }
+const noShadow = () => shadow(0, 0, 0);
+function bg(c) { ctx.fillStyle = c; ctx.fillRect(0, 0, W, H); }
+function rrect(x, y, w, h, r, fill) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); ctx.fillStyle = fill; ctx.fill(); }
+
+/** Quebra um texto real em linhas (sem reescrever: só decide onde quebra). */
+function wrap(str, size, weight, maxW, fam = SANS) {
+  font(weight, size, fam);
+  const space = ctx.measureText(' ').width, lines = [];
+  let cur = [], curW = 0;
+  for (const word of str.split(' ')) {
+    const w = ctx.measureText(word).width;
+    if (cur.length && curW + space + w > maxW) { lines.push(cur); cur = []; curW = 0; }
+    cur.push({ word, x: cur.length ? curW + space : 0, w });
+    curW = cur.length > 1 ? curW + space + w : w;
+  }
+  if (cur.length) lines.push(cur);
+  return lines.map((ws) => ({ words: ws, width: ws[ws.length - 1].x + ws[ws.length - 1].w, text: ws.map((w) => w.word).join(' ') }));
+}
+/** Texto que sobe de dentro de uma máscara (nunca entra com fade). */
+function rise(s, x, y, size, weight, color, k, align = 'left', fam = SANS) {
+  if (k <= 0) return;
+  font(weight, size, fam);
+  const w = ctx.measureText(s).width, left = align === 'center' ? x - w / 2 : align === 'right' ? x - w : x;
+  ctx.save();
+  clipRect(left - 20, y - size * 1.02, w + 40, size * 1.36);
+  text(s, x, y + size * 1.15 * (1 - easeOut(k)), color, align);
+  ctx.restore();
+}
+/** Parágrafo; "\n" marca uma quebra escolhida (o texto não muda, só onde quebra); linha i entra em t0 + i * stagger. */
+function para(str, x, y, size, weight, color, maxW, lh, u, t0, stagger = S16, align = 'left') {
+  const lines = str.split('\n').flatMap((seg) => wrap(seg, size, weight, maxW));
+  lines.forEach((ln, i) => rise(ln.text, x, y + i * lh, size, weight, color, prog(u, t0 + i * stagger, t0 + i * stagger + 0.42), align));
+  return lines;
+}
+
+// ícones de traço: espessura = 1/12 do tamanho (o 2px num ícone de 24px), pontas arredondadas
+function strokeStyle(s, color = INK) { ctx.lineWidth = s / 12; ctx.strokeStyle = color; ctx.lineCap = ctx.lineJoin = 'round'; }
+function partialPath(pts, k) {
+  const lens = pts.slice(1).map((p, i) => Math.hypot(p[0] - pts[i][0], p[1] - pts[i][1]));
+  let left = k * lens.reduce((a, z) => a + z, 0);
+  ctx.beginPath(); ctx.moveTo(...pts[0]);
+  for (let i = 0; i < lens.length && left > 0; i++) {
+    const f = Math.min(1, left / lens[i]);
+    ctx.lineTo(lerp(pts[i][0], pts[i + 1][0], f), lerp(pts[i][1], pts[i + 1][1], f));
+    left -= lens[i];
+  }
+  ctx.stroke();
+}
+const ICON = {
+  box(s, k = 1) {           // caixa de encomenda com a fita em laranja
+    strokeStyle(s);
+    ctx.beginPath(); ctx.roundRect(-s * 0.42, -s * 0.3, s * 0.84, s * 0.66, s * 0.08); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-s * 0.42, -s * 0.08); ctx.lineTo(s * 0.42, -s * 0.08); ctx.stroke();
+    strokeStyle(s, OR); ctx.beginPath(); ctx.moveTo(0, -s * 0.3); ctx.lineTo(0, s * 0.08 + (k - 1) * 0); ctx.stroke();
+  },
+  house(s) {
+    strokeStyle(s);
+    ctx.beginPath(); ctx.moveTo(-s * 0.38, -s * 0.02); ctx.lineTo(0, -s * 0.36); ctx.lineTo(s * 0.38, -s * 0.02);
+    ctx.moveTo(-s * 0.3, -s * 0.08); ctx.lineTo(-s * 0.3, s * 0.34); ctx.lineTo(s * 0.3, s * 0.34); ctx.lineTo(s * 0.3, -s * 0.08); ctx.stroke();
+    strokeStyle(s, OR); ctx.beginPath(); ctx.moveTo(-s * 0.08, s * 0.34); ctx.lineTo(-s * 0.08, s * 0.1); ctx.lineTo(s * 0.08, s * 0.1); ctx.lineTo(s * 0.08, s * 0.34); ctx.stroke();
+  },
+  building(s) {
+    strokeStyle(s);
+    ctx.beginPath(); ctx.roundRect(-s * 0.26, -s * 0.38, s * 0.52, s * 0.74, s * 0.04); ctx.stroke();
+    for (const [x, y] of [[-0.1, -0.22], [0.1, -0.22], [-0.1, -0.04], [0.1, -0.04]]) { ctx.beginPath(); ctx.moveTo(s * (x - 0.03), s * y); ctx.lineTo(s * (x + 0.03), s * y); ctx.stroke(); }
+    strokeStyle(s, OR); ctx.beginPath(); ctx.moveTo(-s * 0.07, s * 0.36); ctx.lineTo(-s * 0.07, s * 0.16); ctx.lineTo(s * 0.07, s * 0.16); ctx.lineTo(s * 0.07, s * 0.36); ctx.stroke();
+  },
+  retry(s) {
+    strokeStyle(s);
+    ctx.beginPath(); ctx.arc(0, 0, s * 0.3, -Math.PI * 0.35, Math.PI * 1.45); ctx.stroke();
+    strokeStyle(s, OR);
+    const a = -Math.PI * 0.35, ex = Math.cos(a) * s * 0.3, ey = Math.sin(a) * s * 0.3;
+    ctx.beginPath(); ctx.moveTo(ex - s * 0.16, ey - s * 0.04); ctx.lineTo(ex, ey); ctx.lineTo(ex - s * 0.02, ey + s * 0.16); ctx.stroke();
+  },
+  bag(s) {
+    strokeStyle(s);
+    ctx.beginPath(); ctx.roundRect(-s * 0.32, -s * 0.16, s * 0.64, s * 0.52, s * 0.06); ctx.stroke();
+    strokeStyle(s, OR); ctx.beginPath(); ctx.arc(0, -s * 0.16, s * 0.14, Math.PI, 0); ctx.stroke();
+  },
+  store(s) {
+    strokeStyle(s);
+    ctx.beginPath(); ctx.moveTo(-s * 0.34, -s * 0.06); ctx.lineTo(-s * 0.34, s * 0.36); ctx.lineTo(s * 0.34, s * 0.36); ctx.lineTo(s * 0.34, -s * 0.06); ctx.stroke();
+    strokeStyle(s, OR);
+    ctx.beginPath(); ctx.moveTo(-s * 0.4, -s * 0.12); ctx.lineTo(-s * 0.32, -s * 0.34); ctx.lineTo(s * 0.32, -s * 0.34); ctx.lineTo(s * 0.4, -s * 0.12);
+    for (let i = 0; i <= 4; i++) { const x = lerp(-0.4, 0.4, i / 4) * s; i ? ctx.quadraticCurveTo(x - s * 0.1, s * 0.0, x, -s * 0.12) : ctx.lineTo(x, -s * 0.12); }
+    ctx.stroke();
+  },
+  chat(s) {
+    strokeStyle(s);
+    ctx.beginPath(); ctx.roundRect(-s * 0.36, -s * 0.28, s * 0.72, s * 0.5, s * 0.14); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-s * 0.18, s * 0.22); ctx.lineTo(-s * 0.26, s * 0.36); ctx.lineTo(-s * 0.02, s * 0.22); ctx.stroke();
+    ctx.fillStyle = OR; ctx.beginPath(); ctx.arc(s * 0.32, -s * 0.28, s * 0.1, 0, Math.PI * 2); ctx.fill();
+  },
+  calendar(s) {
+    strokeStyle(s);
+    ctx.beginPath(); ctx.roundRect(-s * 0.34, -s * 0.26, s * 0.68, s * 0.6, s * 0.08); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-s * 0.34, -s * 0.08); ctx.lineTo(s * 0.34, -s * 0.08);
+    ctx.moveTo(-s * 0.16, -s * 0.36); ctx.lineTo(-s * 0.16, -s * 0.18); ctx.moveTo(s * 0.16, -s * 0.36); ctx.lineTo(s * 0.16, -s * 0.18); ctx.stroke();
+    font(700, s * 0.3); ctx.textBaseline = 'middle'; text('7', 0, s * 0.14, OR, 'center'); ctx.textBaseline = 'alphabetic';
+  },
+  qr(s) {
+    strokeStyle(s);
+    for (const [x, y] of [[-1, -1], [1, -1], [-1, 1]]) { ctx.beginPath(); ctx.roundRect(x * s * 0.22 - s * 0.12, y * s * 0.22 - s * 0.12, s * 0.24, s * 0.24, s * 0.04); ctx.stroke(); }
+    ctx.fillStyle = OR;
+    for (const [x, y] of [[0.14, 0.14], [0.3, 0.14], [0.14, 0.3], [0.3, 0.3], [0.22, 0.22]]) { ctx.fillRect(s * x - s * 0.035, s * y - s * 0.035, s * 0.07, s * 0.07); }
+  },
+  tag(s) {
+    strokeStyle(s);
+    ctx.beginPath(); ctx.moveTo(-s * 0.34, -s * 0.08); ctx.lineTo(-s * 0.08, -s * 0.34); ctx.lineTo(s * 0.32, -s * 0.34); ctx.lineTo(s * 0.32, s * 0.06); ctx.lineTo(s * 0.06, s * 0.32); ctx.closePath(); ctx.stroke();
+    ctx.fillStyle = OR; ctx.beginPath(); ctx.arc(s * 0.16, -s * 0.18, s * 0.06, 0, Math.PI * 2); ctx.fill();
+  },
+};
+function icon(name, x, y, s, scale = 1) {
+  if (scale <= 0.01) return;
+  ctx.save(); ctx.translate(x, y); ctx.scale(scale, scale); ICON[name](s); ctx.restore();
+}
+/** Pin da marca (geometria do icon.svg), ancorado na ponta, com altura h. */
+function pin(x, tipY, h, color = OR, sx = 1, sy = 1) {
+  const k = h / 56;  // altura do pin no icon.svg: de 22 a 78
+  ctx.save(); ctx.translate(x, tipY); ctx.scale(k * sx, k * sy); ctx.translate(-50, -78);
+  ctx.fillStyle = color; ctx.fill(PIN, 'evenodd'); ctx.restore();
+}
+/** Os três traços de velocidade (inspirados no logo), atrás de algo que se move. */
+function speedLines(x, y, dirX, dirY, len, s, k) {
+  if (k <= 0) return;
+  const nx = -dirY, ny = dirX;
+  ctx.lineCap = 'round'; ctx.strokeStyle = OR;
+  [[-1, 0.7], [0, 1], [1, 0.55]].forEach(([o, f]) => {
+    const l = len * f * k, ox = x + nx * o * s, oy = y + ny * o * s;
+    ctx.lineWidth = s * 0.45;
+    ctx.beginPath(); ctx.moveTo(ox - dirX * s * 0.6, oy - dirY * s * 0.6); ctx.lineTo(ox - dirX * (s * 0.6 + l), oy - dirY * (s * 0.6 + l)); ctx.stroke();
+  });
+}
+function card(x, y, w, h, r = 32) {
+  shadow(48, 16, 0.1); rrect(x, y, w, h, r, WHITE); noShadow();
+}
+/** Recorte de uma tela real do app num cartão arredondado (a tela em si não é redesenhada). */
+function screen(img, crop, x, y, w, rot = 0, s = 1) {
+  const [sx, sy, sw, sh] = crop, h = (w * sh) / sw;
+  ctx.save();
+  ctx.translate(x + w / 2, y + h / 2); ctx.rotate(rot); ctx.scale(s, s); ctx.translate(-w / 2, -h / 2);
+  shadow(60, 22, 0.14); rrect(0, 0, w, h, 30, CREAM); noShadow();
+  ctx.beginPath(); ctx.roundRect(0, 0, w, h, 30); ctx.clip();
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, w, h);
+  ctx.restore();
+  return h;
+}
+const CROP = { enc: [0, 20, 540, 500], ret: [0, 20, 540, 660], cart: [0, 10, 540, 290] };
+
+// ---------------------------------------------------------------- 1 · "Sua compra chegou. Você não estava."
+const L1 = V
+  ? { door: [650, 380, 320, 560], floor: 940, box: [420, 940], bell: [650, 300], text: [80, 1150], size: 100, boxS: 200 }
+  : { door: [1520, 240, 360, 620], floor: 860, box: [1250, 860], bell: [1520, 160], text: [160, 500], size: 112, boxS: 230 };
+function scene1(u) {
+  bg(CREAM);
+  // empurrão lento de câmera durante todo o compasso
+  const push = 1 + 0.045 * easeOut(u / BAR);
+  ctx.save(); ctx.translate(W / 2, H / 2); ctx.scale(push, push); ctx.translate(-W / 2, -H / 2);
+  const [dx, dy, dw, dh] = L1.door, fx = dx - dw / 2;
+  // chão e porta (traço de 2px na escala do ícone)
+  ctx.lineCap = 'round'; ctx.lineWidth = 8; ctx.strokeStyle = INK;
+  ctx.beginPath(); ctx.moveTo(fx - 260, L1.floor); ctx.lineTo(fx + dw + 160, L1.floor); ctx.stroke();
+  ctx.lineWidth = 10;
+  ctx.beginPath(); ctx.roundRect(fx, dy, dw, dh, [26, 26, 0, 0]); ctx.stroke();
+  ctx.beginPath(); ctx.arc(fx + dw - 54, dy + dh * 0.55, 10, 0, Math.PI * 2); ctx.fillStyle = INK; ctx.fill();
+  ctx.lineWidth = 8; ctx.strokeStyle = INK3; ctx.beginPath(); ctx.moveTo(fx + 40, L1.floor + 22); ctx.lineTo(fx + dw - 40, L1.floor + 22); ctx.stroke();
+  // campainha: balança no "ding" (batida 1) e no "dong" (batida 2)
+  const [bx, by] = L1.bell, ring = bump(u, 0, 0.3) + bump(u, BEAT, 0.3);
+  ctx.save(); ctx.translate(bx, by); ctx.rotate(Math.sin(u * 40) * 0.22 * ring);
+  strokeStyle(96);
+  ctx.beginPath(); ctx.moveTo(-30, 20); ctx.quadraticCurveTo(-30, -36, 0, -36); ctx.quadraticCurveTo(30, -36, 30, 20); ctx.lineTo(38, 30); ctx.lineTo(-38, 30); ctx.closePath(); ctx.stroke();
+  strokeStyle(96, OR); ctx.beginPath(); ctx.moveTo(-8, 42); ctx.lineTo(8, 42); ctx.stroke();
+  ctx.restore();
+  for (const [t0, side] of [[0, -1], [BEAT, 1]]) {
+    const k = prog(u, t0, t0 + 0.35);
+    if (k <= 0 || k >= 1) continue;
+    ctx.lineWidth = 7; ctx.strokeStyle = OR; ctx.lineCap = 'round';
+    for (let i = 0; i < 2; i++) {
+      const r = 60 + i * 26 + 30 * easeOut(k);
+      ctx.beginPath(); ctx.arc(bx, by, r, side < 0 ? Math.PI * 0.85 : -Math.PI * 0.15, side < 0 ? Math.PI * 1.15 : Math.PI * 0.15); ctx.stroke();
+    }
+  }
+  // a caixa pousa no tempo 1 (pré-rolada: o quadro 0 já é o impacto)
+  const [px, py] = L1.box, s = L1.boxS;
+  const fall = prog(u, -0.2, 0), land = Math.max(0, 1 - Math.abs(u) / 0.12) * (u >= 0 ? 1 : 0);
+  const sag = easeOut(prog(u, 2 * BEAT, 2 * BEAT + 0.3));
+  ctx.save();
+  ctx.translate(px, lerp(py - 500, py, fall * fall));
+  ctx.scale(1 + 0.25 * land + 0.06 * sag, 1 - 0.22 * land - 0.05 * sag);
+  ctx.rotate(-0.06 * sag);
+  icon('box', 0, -s * 0.36, s);
+  ctx.restore();
+  // texto
+  const [tx, ty] = L1.text, sz = L1.size, maxW = V ? 900 : 1150;
+  const l1 = para('Sua compra chegou.', tx, ty, sz, 800, INK, maxW, sz * 1.08, u, -0.25);
+  para('Você não estava.', tx, ty + l1.length * sz * 1.08 + sz * 0.18, sz, 800, OR, maxW, sz * 1.08, u, 2 * BEAT - 0.05);
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------- 2 · "E agora é torcer pelo vizinho, pelo porteiro ou pela terceira tentativa."
+const SENT2 = 'E agora é torcer pelo vizinho, pelo porteiro ou pela terceira tentativa.';
+const GROUP2 = [0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 3, 3];   // em que batida cada palavra entra
+const L2 = V
+  ? { x: 80, y: 520, size: 88, maxW: 900, row: { y: 1260, xs: [220, 540, 860], r: 100 }, box: 130 }
+  : { x: 160, y: 300, size: 96, maxW: 1600, row: { y: 780, xs: [480, 960, 1440], r: 124 }, box: 150 };
+function scene2(u) {
+  bg(CREAM);
+  const lines = wrap(SENT2, L2.size, 800, L2.maxW);
+  let wi = 0;
+  lines.forEach((ln, li) => ln.words.forEach((w) => {
+    const g = GROUP2[wi], t0 = g * BEAT + (wi % 2) * 0.03;
+    rise(w.word, L2.x + w.x, L2.y + li * L2.size * 1.12, L2.size, 800, g === 3 ? OR : INK, prog(u, t0 - 0.06, t0 + 0.36));
+    wi++;
+  }));
+  // três tentativas: vizinho, porteiro, terceira tentativa
+  const { y, xs, r } = L2.row, names = ['house', 'building', 'retry'];
+  const kLine = easeOut(prog(u, 0.05, BEAT));
+  ctx.setLineDash([2, 22]); ctx.lineWidth = 8; ctx.strokeStyle = INK3; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(xs[0], y); ctx.lineTo(lerp(xs[0], xs[2], kLine), y); ctx.stroke(); ctx.setLineDash([]);
+  xs.forEach((x, i) => {
+    const t0 = (i + 1) * BEAT, kOn = prog(u, t0, t0 + 0.3), kIn = prog(u, i * 0.08, i * 0.08 + 0.4);
+    const s = spring(kIn) * (1 + 0.1 * bump(u, t0, 0.3));
+    if (s <= 0.01) return;
+    ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
+    ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.fillStyle = kOn > 0 ? OR_P : WHITE; ctx.fill();
+    ctx.lineWidth = 6; ctx.strokeStyle = kOn > 0 ? OR : LINE; ctx.stroke();
+    icon(names[i], 0, 0, r * 1.1);
+    // a tentativa passa e não dá certo: risco em tinta
+    const kx = easeOut(prog(u, t0 + E8, t0 + E8 + 0.2));
+    if (kx > 0 && i < 2) { strokeStyle(r * 1.2, INK2); partialPath([[-r * 0.72, r * 0.72], [r * 0.72, -r * 0.72]], kx); }
+    ctx.restore();
+  });
+  // a caixa pula de tentativa em tentativa e, na terceira, vai embora com os traços de velocidade
+  const hopTo = (i) => xs[clamp(i, 0, 2)];
+  const step = clamp(Math.floor(u / BEAT), 0, 3), kh = spring(prog(u, step * BEAT, step * BEAT + 0.3));
+  const from = hopTo(step - 1), to = hopTo(step), bxp = step === 0 ? xs[0] - 260 : lerp(from, to, kh);
+  const leave = inCubic(prog(u, 3 * BEAT + E8, BAR));
+  const boxX = bxp + leave * (W + 400), boxY = y - r - 70 - 60 * Math.sin(Math.PI * clamp(kh)) * (step > 0 && step < 3 ? 1 : 0);
+  speedLines(boxX - 70, boxY - 40, 1, 0, 180, 20, leave * 4);
+  icon('box', boxX, boxY, L2.box, spring(prog(u, 0, 0.3)));
+}
+
+// ---------------------------------------------------------------- 3 · "Chega de perder encomendas." (virada, em tinta)
+const L3 = V
+  ? { x: 80, y: 820, size: 140, maxW: 880, pinH: 210 }
+  : { x: 160, y: 480, size: 168, maxW: 1300, pinH: 230 };
+/** Onde o pin pousa: à direita da linha mais longa se couber; senão, em cima do título. */
+function pin3Spot() {
+  const lines = wrap('Chega de perder encomendas.', L3.size, 800, L3.maxW);
+  const last = lines.length - 1, widest = Math.max(...lines.map((l) => l.width));
+  const right = L3.x + widest + L3.pinH * 0.62;
+  if (right + L3.pinH * 0.4 < W - (V ? 120 : 160)) return { lines, x: right, tip: L3.y + last * L3.size * 1.05 };
+  return { lines, x: L3.x + L3.pinH * 0.36, tip: L3.y - L3.size * 0.95 };
+}
+function scene3(u) {
+  bg(INK);
+  const { lines, x: pxp, tip } = pin3Spot();
+  lines.forEach((ln, i) => rise(ln.text, L3.x, L3.y + i * L3.size * 1.05, L3.size, 800, CREAM, prog(u, i * S16 - 0.08, i * S16 + 0.36)));
+  // o pin cai na batida 2 e pousa na batida 3, com os três traços de velocidade
+  const kf = prog(u, BEAT, 2 * BEAT), yTip = lerp(-220, tip, kf * kf);
+  const land = Math.max(0, 1 - Math.abs(u - 2 * BEAT) / 0.1) * (u >= 2 * BEAT ? 1 : 0);
+  if (kf > 0) {
+    if (kf < 1) speedLines(pxp, yTip - L3.pinH * 0.7, 0, 1, 260, 16, 1);
+    const kr = prog(u, 2 * BEAT, 2 * BEAT + 0.5);
+    if (kr > 0 && kr < 1) {
+      ctx.beginPath(); ctx.ellipse(pxp, tip, 30 + 160 * easeOut(kr), (30 + 160 * easeOut(kr)) * 0.3, 0, 0, Math.PI * 2);
+      ctx.lineWidth = 6 * (1 - kr) + 1; ctx.strokeStyle = OR; ctx.stroke();
+    }
+    pin(pxp, yTip, L3.pinH, OR, 1 + 0.3 * land, 1 - 0.25 * land);
+  }
+}
+
+// ---------------------------------------------------------------- 4 · "Compre onde quiser. A gente recebe pra você."
+const L4 = V
+  ? { x: 80, y: 470, size: 92, maxW: 900, a: [270, 900], b: [790, 1320], c1: [640, 930], c2: [790, 1080], label: 64 }   // sai para a direita, longe do rótulo
+  : { x: 160, y: 250, size: 104, maxW: 1640, a: [400, 780], b: [1540, 700], c1: [820, 1020], c2: [1150, 420], label: 70 };
+const bez = (p0, p1, p2, p3, t) => [0, 1].map((i) => (1 - t) ** 3 * p0[i] + 3 * (1 - t) ** 2 * t * p1[i] + 3 * (1 - t) * t * t * p2[i] + t ** 3 * p3[i]);
+function scene4(u) {
+  bg(CREAM);
+  const l1 = para('Compre onde quiser.', L4.x, L4.y, L4.size, 800, INK, L4.maxW, L4.size * 1.08, u, -0.05);
+  para(V ? 'A gente recebe\npra você.' : 'A gente recebe pra você.', L4.x, L4.y + l1.length * L4.size * 1.08, L4.size, 800, OR, L4.maxW, L4.size * 1.08, u, 2 * BEAT - 0.05);
+  const { a, b, c1, c2 } = L4;
+  // caminho pontilhado da loja até a agência
+  const kd = easeOut(prog(u, 0, BEAT));
+  ctx.setLineDash([2, 24]); ctx.lineWidth = 9; ctx.strokeStyle = INK3; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(...a);
+  for (let i = 1; i <= 60 * kd; i++) ctx.lineTo(...bez(a, c1, c2, b, i / 60));
+  ctx.stroke(); ctx.setLineDash([]);
+  // nó de origem: qualquer loja online
+  const ka = spring(prog(u, 0, 0.35));
+  ctx.save(); ctx.translate(...a); ctx.scale(ka, ka);
+  ctx.beginPath(); ctx.arc(0, 0, 96, 0, Math.PI * 2); ctx.fillStyle = WHITE; shadow(30, 10, 0.08); ctx.fill(); noShadow();
+  icon('bag', 0, 0, 110); ctx.restore();
+  rise('qualquer loja online', a[0], a[1] + 166, 50, 500, INK2, prog(u, 0.1, 0.5), 'center');
+  // nó de chegada: o pin da cena anterior desliza até a agência parceira
+  const from = pin3Spot(), kp = spring(prog(u, 0, 0.45));
+  const pinX = lerp(from.x, b[0], kp), pinTip = lerp(from.tip, b[1] - 60, kp), pinH = lerp(L3.pinH, 150, kp);
+  const kb = spring(prog(u, 0.2, 0.55));
+  ctx.save(); ctx.translate(...b); ctx.scale(kb, kb);
+  ctx.beginPath(); ctx.arc(0, 40, 96, 0, Math.PI * 2); ctx.fillStyle = OR_P; ctx.fill();
+  icon('store', 0, 52, 100); ctx.restore();
+  const arrive = 2 * BEAT, hop = bump(u, arrive, 0.3);
+  pin(pinX, pinTip - 30 * hop, pinH, OR, 1 + 0.12 * hop, 1 - 0.08 * hop);
+  rise('agência parceira', b[0], b[1] + 204, 50, 500, INK2, prog(u, 0.3, 0.7), 'center');
+  // a encomenda percorre o caminho (batida 2 a 3) e chega na agência na batida 3
+  const kt = prog(u, BEAT, arrive);
+  if (kt > 0 && kt < 1) {
+    const e = inOutCubic(kt), p = bez(a, c1, c2, b, e), q = bez(a, c1, c2, b, Math.min(1, e + 0.02));
+    const d = Math.hypot(q[0] - p[0], q[1] - p[1]) || 1;
+    speedLines(p[0], p[1] - 10, (q[0] - p[0]) / d, (q[1] - p[1]) / d, 140, 15, Math.sin(Math.PI * kt) * 1.4);
+    icon('box', p[0], p[1] - 10, 96);
+  }
+}
+
+// ---------------------------------------------------------------- 5 · "No destinatário, o seu nome; no complemento, só o seu ID." + LOKAL12
+const L5 = V
+  ? { x: 80, y: 720, size: 58, maxW: 920, pill: [80, 900, 220], mono: 168 }
+  : { x: 160, y: 330, size: 72, maxW: 1640, pill: [160, 520, 270], mono: 214 };
+function scene5(u) {
+  bg(CREAM);
+  para('No destinatário, o seu nome;\nno complemento, só o seu ID.', L5.x, L5.y, L5.size, 500, INK2, L5.maxW, L5.size * 1.3, u, -0.05, S16 / 2);
+  const [px, py, ph] = L5.pill, id = 'LOKAL12';
+  font(500, L5.mono, MONO);
+  const cw = ctx.measureText('L').width, padX = ph * 0.32, pw = cw * id.length + padX * 2;
+  const kp = spring(prog(u, BEAT - 0.12, BEAT + 0.3)), bmp = 1 + 0.06 * bump(u, 3 * BEAT, 0.3);
+  if (kp > 0) {
+    ctx.save(); ctx.translate(px, py + ph / 2); ctx.scale(kp * bmp, kp * bmp); ctx.translate(-px, -(py + ph / 2));
+    rrect(px, py, pw, ph, ph * 0.28, OR_P);
+    // uma letra por semicolcheia, a partir da batida 2
+    const n = clamp(Math.floor((u - BEAT) / S16) + 1, 0, id.length);
+    font(500, L5.mono, MONO); text(id.slice(0, n), px + padX, py + ph * 0.7, OR_D);
+    if (n < id.length || Math.floor(u / (BEAT / 2)) % 2 === 0) {
+      ctx.fillStyle = OR; ctx.fillRect(px + padX + cw * n + 6, py + ph * 0.2, 8, ph * 0.6);
+    }
+    ctx.restore();
+  }
+}
+
+// ---------------------------------------------------------------- 6 · "A gente recebe e te avisa. Você retira." + telas reais
+const L6 = V
+  ? { x: 80, y: 360, size: 84, maxW: 900, note: [80, 1520], cards: [['enc', 80, 610, 560, -0.035], ['ret', 470, 700, 520, 0.03], ['cart', 100, 1160, 560, -0.02]] }
+  : { x: 160, y: 380, size: 92, maxW: 700, note: [160, 720], cards: [['enc', 880, 150, 520, -0.03], ['ret', 1290, 240, 520, 0.025], ['cart', 960, 690, 520, -0.02]] };
+function scene6body(u) {
+  bg(CREAM);
+  const l1 = para('A gente recebe\ne te avisa.', L6.x, L6.y, L6.size, 800, INK, L6.maxW, L6.size * 1.08, u, -0.05);
+  para('Você retira.', L6.x, L6.y + l1.length * L6.size * 1.08, L6.size, 800, OR, L6.maxW, L6.size * 1.08, u, BEAT - 0.05);
+  L6.cards.forEach(([key, x, y, w, rot], i) => {
+    const t0 = (i + 1) * BEAT - 0.08, k = prog(u, t0, t0 + 0.5);
+    if (k <= 0) return;
+    const e = spring(k), drift = (u - t0) * (i % 2 ? -8 : 8);
+    screen(IMG[key], CROP[key], x, y + 160 * (1 - easeOut(k)) + drift, w, rot * (2 - e), lerp(0.9, 1, e));
+  });
+  // a frase real do site que avisa que as telas usam dados de exemplo
+  para('Telas do aplicativo com dados de exemplo.', L6.note[0], L6.note[1], 34, 500, INK3, V ? 900 : 640, 44, u, 3 * BEAT);
+}
+function scene6(u) { scene6body(u); }
+
+// ---------------------------------------------------------------- 7 · os quatro benefícios
+const BENEFITS = [
+  ['chat', 'Aviso no WhatsApp quando chega'], ['calendar', '7 dias úteis pra buscar com calma'],
+  ['qr', 'Retirada protegida por QR Code'], ['tag', 'R$ 5,90 na maioria dos pacotes'],
+];
+const L7 = V
+  ? { cells: [0, 1, 2, 3].map((i) => [80, 420 + i * 285, 900, 250]), size: 50, icon: 70 }
+  : { cells: [[160, 190, 780, 320], [980, 190, 780, 320], [160, 570, 780, 320], [980, 570, 780, 320]], size: 54, icon: 78 };
+function scene7(u) {
+  // empurra a cena 6 para cima
+  const kpush = easeOut(prog(u, 0, 0.32));
+  if (kpush < 1) { ctx.save(); ctx.translate(0, -H * kpush); scene6body(BAR); ctx.restore(); }
+  ctx.save(); ctx.translate(0, H * (1 - kpush));
+  bg(CREAM);
+  BENEFITS.forEach(([ic, label], i) => {
+    const [x, y, w, h] = L7.cells[i], t0 = i * BEAT, k = prog(u, t0 - 0.04, t0 + 0.42);
+    if (k <= 0) return;
+    const e = spring(k);
+    ctx.save(); ctx.translate(x + w / 2, y + h / 2); ctx.scale(lerp(0.88, 1, e), lerp(0.88, 1, e)); ctx.translate(-x - w / 2, -y - h / 2 + 60 * (1 - easeOut(k)));
+    card(x, y, w, h, 34);
+    const cx = x + L7.icon + 40, cy = y + h / 2, r = L7.icon;
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fillStyle = OR_P; ctx.fill();
+    icon(ic, cx, cy, r * 1.2, spring(prog(u, t0 + 0.05, t0 + 0.4)));
+    const tx = cx + r + 44, maxW = x + w - tx - 40;
+    const lines = wrap(label, L7.size, 700, maxW), lh = L7.size * 1.18, top = cy - ((lines.length - 1) * lh) / 2 + L7.size * 0.35;
+    lines.forEach((ln, li) => {
+      const kk = prog(u, t0 + 0.06 + li * 0.05, t0 + 0.46 + li * 0.05);
+      if (label.startsWith('R$ 5,90') && li === 0) {
+        // destaca o preço em laranja, sem mudar o texto
+        rise('R$ 5,90', tx, top + li * lh, L7.size, 700, OR, kk);
+        font(700, L7.size); const pw = ctx.measureText('R$ 5,90 ').width;
+        rise(ln.text.slice(8), tx + pw, top + li * lh, L7.size, 700, INK, kk);
+      } else rise(ln.text, tx, top + li * lh, L7.size, 700, INK, kk);
+    });
+    ctx.restore();
+  });
+  ctx.restore();
+  // a queda do pin da assinatura já começa aqui, na última colcheia
+  if (u > BAR - E8) pinDrop8(u - BAR);
+}
+
+// ---------------------------------------------------------------- 8 · logo + "Pronto pra nunca mais perder uma encomenda?"
+const L8 = V
+  ? { logoW: 640, logo: [540, 760], cta: [540, 1100], size: 64, maxW: 880, url: 1340 }
+  : { logoW: 640, logo: [960, 420], cta: [960, 740], size: 70, maxW: 1760, url: 0 };
+function logoGeom() {
+  const lw = L8.logoW, lh = (lw * 154) / 320, sc = lw / 320;
+  const lx = L8.logo[0] - lw / 2, ly = L8.logo[1] - lh / 2, pinH = LOGO_O.r * sc * 3.3;
+  const ox = lx + LOGO_O.x * sc, oy = ly + LOGO_O.y * sc;
+  return { lw, lh, lx, ly, ox, oy, pinH, tip: oy + (78 - 40) * (pinH / 56) };
+}
+/** O pin cai de -1 colcheia a +1 colcheia (tau relativo ao início da cena 8) e encaixa no "O" do logo. */
+function pinDrop8(tau) {
+  const g = logoGeom(), kf = prog(tau, -E8, E8), land = E8;
+  const kOut = prog(tau, land, land + 0.16);
+  if (kOut >= 1) return;
+  const y = lerp(g.tip - (V ? 420 : 330), g.tip, kf * kf);   // começa já dentro do quadro
+  const sq = Math.max(0, 1 - Math.abs(tau - land) / 0.08) * (tau >= land ? 1 : 0);
+  if (kf < 1) speedLines(g.ox, y - g.pinH * 0.75, 0, 1, 220, 12, 1);
+  pin(g.ox, y, g.pinH * (1 - kOut), OR, 1 + 0.3 * sq, 1 - 0.25 * sq);
+}
+function scene8(u) {
+  bg(CREAM);
+  const { lw, lh, lx, ly, ox, oy } = logoGeom();
+  // o logo se revela a partir do "O" quando o pin encaixa (máscara circular; o logo não é distorcido)
+  const land = E8;
+  const kReveal = easeOut(prog(u, land, land + 0.5));
+  if (kReveal > 0) {
+    ctx.save();
+    ctx.beginPath(); ctx.arc(ox, oy, 2 * lw * kReveal, 0, Math.PI * 2); ctx.clip();
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(IMG.logo, lx, ly + 18 * (1 - kReveal), lw, lh);
+    ctx.restore();
+  }
+  pinDrop8(u);
+  const ctaLines = para(V ? 'Pronto pra nunca mais perder\numa encomenda?' : 'Pronto pra nunca mais perder uma encomenda?', L8.cta[0], L8.cta[1], L8.size, 700, INK, L8.maxW, L8.size * 1.2, u, 2 * BEAT - 0.06, S16 / 2, 'center');
+  rise('vaidelokal.com.br', L8.cta[0], V ? L8.url : L8.cta[1] + ctaLines.length * L8.size * 1.2 + 44, V ? 52 : 52, 700, OR_D, prog(u, 3 * BEAT - 0.06, 3 * BEAT + 0.4), 'center');
+}
+
+// ---------------------------------------------------------------- montagem
+const SCENES = [scene1, scene2, scene3, scene4, scene5, scene6, scene7, scene8];
+function draw(t) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 1; noShadow(); ctx.setLineDash([]);
+  const i = Math.min(7, Math.floor(t / BAR + 1e-9));
+  SCENES[i](t - i * BAR);
+}
+window.seek = async (t) => { await assetsReady; draw(t); };
+
+// ---------------------------------------------------------------- trilha (sintetizada, 128 BPM, dó maior)
+const NOTE = (n) => 440 * 2 ** ((n - 69) / 12);
+window.renderAudio = async (sr) => {
+  const ac = new OfflineAudioContext(2, Math.ceil(DUR * sr), sr);
+  const rnd = mulberry32(0x10ca1);
+  const noise = ac.createBuffer(1, sr * 3, sr);
+  { const d = noise.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = rnd() * 2 - 1; }
+  const comp = new DynamicsCompressorNode(ac, { threshold: -18, knee: 8, ratio: 3, attack: 0.004, release: 0.12 });
+  comp.connect(ac.destination);
+  const bus = new GainNode(ac, { gain: 0.6 }); bus.connect(comp);
+  const echo = new DelayNode(ac, { delayTime: E8 * 1.5, maxDelayTime: 1 });
+  const fb = new GainNode(ac, { gain: 0.25 }), wet = new GainNode(ac, { gain: 0.25 });
+  echo.connect(fb).connect(echo); echo.connect(wet).connect(bus);
+  const send = (node, pan = 0, fx = 0) => {
+    const p = new StereoPannerNode(ac, { pan }); node.connect(p).connect(bus);
+    if (fx) p.connect(new GainNode(ac, { gain: fx })).connect(echo);
+  };
+  const env = (t, a, d, v) => {
+    const g = new GainNode(ac, { gain: 0 });
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v, t + a); g.gain.exponentialRampToValueAtTime(1e-4, t + a + d);
+    return g;
+  };
+  const noiseAt = (t, d) => { const s = new AudioBufferSourceNode(ac, { buffer: noise }); s.start(t, (t * 0.37) % 2); s.stop(t + d); return s; };
+  const osc = (type, f, t, d) => { const o = new OscillatorNode(ac, { type, frequency: f }); o.start(t); o.stop(t + d); return o; };
+  const filt = (type, frequency, Q = 1) => new BiquadFilterNode(ac, { type, frequency, Q });
+
+  const kick = (t, v = 0.8) => {
+    const o = osc('sine', 150, t, 0.4);
+    o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(45, t + 0.1);
+    const g = env(t, 0.002, 0.32, v); o.connect(g); send(g);
+  };
+  const clap = (t, v = 0.22) => {
+    const g = new GainNode(ac, { gain: 0 });
+    for (const o of [0, 0.01, 0.02]) { g.gain.setValueAtTime(v, t + o); g.gain.exponentialRampToValueAtTime(v * 0.25, t + o + 0.008); }
+    g.gain.setValueAtTime(v * 0.7, t + 0.028); g.gain.exponentialRampToValueAtTime(1e-4, t + 0.2);
+    noiseAt(t, 0.25).connect(filt('bandpass', 1700, 0.9)).connect(g); send(g, -0.08, 0.12);
+  };
+  const shaker = (t, v = 0.04) => { const g = env(t, 0.004, 0.04, v); noiseAt(t, 0.06).connect(filt('highpass', 7000)).connect(g); send(g, 0.25); };
+  const rim = (t, v = 0.1) => { const g = env(t, 0.001, 0.03, v); noiseAt(t, 0.04).connect(filt('bandpass', 2600, 4)).connect(g); send(g, -0.2); };
+  const bass = (t, n, d = 0.22, v = 0.28) => {
+    const o = osc('triangle', NOTE(n), t, d + 0.05), s = osc('sine', NOTE(n), t, d + 0.05);
+    const g = env(t, 0.005, d, v); o.connect(filt('lowpass', 500, 0.8)).connect(g); s.connect(g); send(g);
+  };
+  const bell = (t, n, v = 0.1, d = 1.2, pan = 0, ratio = 3.5) => {
+    const f = NOTE(n), car = osc('sine', f, t, d + 0.1), mod = osc('sine', f * ratio, t, d + 0.1);
+    const mg = new GainNode(ac, { gain: 0 });
+    mg.gain.setValueAtTime(f * 1.6, t); mg.gain.exponentialRampToValueAtTime(f * 0.04, t + 0.4);
+    mod.connect(mg).connect(car.frequency);
+    const g = env(t, 0.003, d, v); car.connect(g); send(g, pan, 0.3);
+  };
+  const marimba = (t, n, v = 0.1, pan = 0) => {
+    const f = NOTE(n), a = osc('sine', f, t, 0.5), b = osc('sine', f * 4, t, 0.15);
+    const g = env(t, 0.002, 0.35, v), g2 = env(t, 0.001, 0.06, v * 0.4);
+    a.connect(g); b.connect(g2); send(g, pan, 0.2); send(g2, pan);
+  };
+  const chord = (t, notes, v = 0.045, d = 0.5) => notes.forEach((n, i) => marimba(t + i * 0.012, n, v, -0.3 + i * 0.2));
+  const knock = (t, v = 0.3) => {
+    const o = osc('sine', 120, t, 0.12); o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(70, t + 0.08);
+    const g = env(t, 0.001, 0.09, v); o.connect(g); send(g);
+    const n = env(t, 0.001, 0.02, v * 0.6); noiseAt(t, 0.03).connect(filt('bandpass', 900, 2)).connect(n); send(n);
+  };
+  const thud = (t, v = 0.35) => { const o = osc('sine', 80, t, 0.3); o.frequency.exponentialRampToValueAtTime(48, t + 0.2); const g = env(t, 0.003, 0.25, v); o.connect(filt('lowpass', 200)).connect(g); send(g); };
+  const swish = (t, v = 0.1, d = 0.22, f0 = 700, f1 = 6000) => {
+    const bp = filt('bandpass', f0, 1.2); bp.frequency.setValueAtTime(f0, t); bp.frequency.exponentialRampToValueAtTime(f1, t + d);
+    const g = env(t, 0.02, d, v); noiseAt(t, d + 0.05).connect(bp).connect(g); send(g);
+  };
+  const fallWhistle = (t0, t1, v = 0.05) => {
+    const o = osc('sine', 1800, t0, t1 - t0); o.frequency.setValueAtTime(1800, t0); o.frequency.exponentialRampToValueAtTime(500, t1);
+    const g = new GainNode(ac, { gain: 0 }); g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(v, t0 + 0.05); g.gain.setValueAtTime(v, t1 - 0.02); g.gain.linearRampToValueAtTime(0, t1);
+    o.connect(g); send(g, 0, 0.15);
+  };
+  const pop = (t, f0 = 900, f1 = 300, v = 0.2, pan = 0) => {
+    const o = osc('sine', f0, t, 0.15); o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + 0.07);
+    const g = env(t, 0.002, 0.11, v); o.connect(g); send(g, pan, 0.1);
+  };
+  const tick = (t, v = 0.08) => { const g = env(t, 0.001, 0.015, v); noiseAt(t, 0.02).connect(filt('highpass', 4000)).connect(g); send(g, 0.15); };
+  const riser = (t0, t1, v = 0.12) => {
+    const bp = filt('bandpass', 300, 1.5); bp.frequency.setValueAtTime(300, t0); bp.frequency.exponentialRampToValueAtTime(7000, t1);
+    const g = new GainNode(ac, { gain: 0 }); g.gain.setValueAtTime(1e-4, t0); g.gain.exponentialRampToValueAtTime(v, t1 - 0.01); g.gain.setValueAtTime(0, t1);
+    noiseAt(t0, t1 - t0 + 0.02).connect(bp).connect(g); send(g);
+  };
+  const pad = (t0, t1, notes, v = 0.03) => {
+    const lp = filt('lowpass', 900, 0.7), g = new GainNode(ac, { gain: 0 });
+    g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(v, t0 + 0.25); g.gain.setValueAtTime(v, t1 - 0.05); g.gain.linearRampToValueAtTime(0, t1);
+    lp.connect(g); send(g, 0, 0.2);
+    for (const n of notes) for (const det of [-8, 8]) { const o = osc('sawtooth', NOTE(n), t0, t1 - t0); o.detune.value = det; o.connect(lp); }
+  };
+  const bar = (i) => i * BAR;
+  const C = { F: [41, [65, 69, 72]], C: [36, [64, 67, 72]], G: [43, [62, 67, 71]], Am: [45, [64, 69, 72]], Dm: [38, [62, 65, 69]] };
+
+  // 1 · campainha: ding (mi) na batida 1, dong (dó) na batida 2; "Você não estava." cai seco
+  bell(0, 76, 0.16, 1.2, -0.1, 2); thud(0, 0.25);
+  bell(BEAT, 72, 0.16, 1.4, 0.1, 2);
+  thud(2 * BEAT, 0.4); pad(2 * BEAT, bar(1), [57, 60, 64], 0.02);
+  // 2 · relógio nas colcheias, três batidas na porta, subida para a virada
+  for (let e = 0; e < 8; e++) rim(bar(1) + e * E8, e % 2 ? 0.06 : 0.1);
+  [1, 2, 3].forEach((b, i) => { knock(bar(1) + b * BEAT, 0.22 + i * 0.06); knock(bar(1) + b * BEAT + S16, 0.16 + i * 0.05); });
+  riser(bar(1) + 2 * BEAT, bar(2), 0.14);
+  // 3 a 7 · groove: bumbo nas batidas, palma no 2 e 4, chocalho em semicolcheias, baixo em colcheias
+  const prog7 = ['F', 'C', 'G', 'Am', 'F'];
+  for (let i = 2; i <= 6; i++) {
+    const [root, tones] = C[prog7[i - 2]];
+    for (let s = 0; s < 16; s++) {
+      const t = bar(i) + s * S16;
+      if (s % 4 === 0) kick(t, s === 0 ? 0.9 : 0.75);
+      if (s === 4 || s === 12) clap(t);
+      shaker(t, s % 2 ? 0.05 : 0.03);
+      if (s % 2 === 0) bass(t, s % 4 === 0 ? root : root + 12, 0.2, s % 4 === 0 ? 0.28 : 0.18);
+    }
+    chord(bar(i), tones.map((n) => n + 12));
+    chord(bar(i) + 2 * BEAT + E8, tones.map((n) => n + 12), 0.035);
+  }
+  // 3 · o pin cai (batida 2) e pousa (batida 3)
+  fallWhistle(bar(2) + BEAT, bar(2) + 2 * BEAT); pop(bar(2) + 2 * BEAT, 1200, 300, 0.24); bell(bar(2) + 2 * BEAT, 84, 0.07, 0.8);
+  // 4 · a encomenda viaja e chega na agência
+  pop(bar(3), 700, 400, 0.12, -0.3); swish(bar(3) + BEAT, 0.12, BEAT * 0.9, 500, 5000);
+  pop(bar(3) + 2 * BEAT, 1300, 400, 0.2, 0.3); bell(bar(3) + 2 * BEAT, 79, 0.07, 0.7);
+  // 5 · LOKAL12, uma tecla por semicolcheia
+  for (let c = 0; c < 7; c++) tick(bar(4) + BEAT + c * S16, 0.1);
+  pop(bar(4) + BEAT, 600, 900, 0.1); bell(bar(4) + 3 * BEAT, 86, 0.07, 0.8);
+  // 6 · as três telas entram nas batidas 2, 3 e 4
+  [1, 2, 3].forEach((b, i) => { swish(bar(5) + b * BEAT - 0.06, 0.08, 0.14); marimba(bar(5) + b * BEAT, [76, 79, 84][i], 0.12, -0.3 + i * 0.3); });
+  // 7 · um benefício por batida
+  [0, 1, 2, 3].forEach((b, i) => { pop(bar(6) + b * BEAT, 900 + i * 150, 500 + i * 100, 0.12); marimba(bar(6) + b * BEAT, [72, 76, 79, 84][i], 0.12); });
+  riser(bar(6) + 2 * BEAT, bar(7), 0.1);
+  // 8 · o pin encaixa no "O" e a campainha volta resolvida (dó, sol, dó)
+  kick(bar(7), 0.8); fallWhistle(bar(7) - E8, bar(7) + E8, 0.05);
+  pop(bar(7) + E8, 1200, 300, 0.22); bass(bar(7) + E8, 36, 1.4, 0.3);
+  bell(bar(7) + E8, 72, 0.12, 1.2, -0.1, 2); bell(bar(7) + BEAT, 79, 0.12, 1.2, 0.1, 2); bell(bar(7) + 2 * BEAT, 84, 0.1, 1.0, 0, 2);
+  chord(bar(7) + 2 * BEAT, [64, 67, 72, 76], 0.04);
+  marimba(bar(7) + 3 * BEAT, 79, 0.08);
+
+  return ac.startRendering();
+};
+</script>
+</html>

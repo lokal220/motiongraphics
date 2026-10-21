@@ -1,0 +1,551 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<title>04 - VAI DE LOKAL, marca de verdade</title>
+<!--
+  20 s a 120 BPM (40 batidas). Uma linha do tempo, três composições:
+    padrão 1920x1080 · ?formato=quadrado 1080x1080 · ?formato=vertical 1080x1920
+  Toda interface é captura real do site (Playwright, ../../assets/capturas): nada é redesenhado.
+  O cursor e as marcações (anel do clique, cantos do QR) são as únicas coisas desenhadas por cima.
+    0-3 s    gancho: "VOCÊ PRECISA ESTAR EM CASA" (texto real do cartão "HOJE")
+    3-7 s    o produto: "COM A LOKAL" e o hero do site montado peça por peça
+    7-16 s   três recursos, cada um com um clique real
+    16-20 s  assinatura: logo + chamada final
+  (sem o momento "número": o site não publica nenhum número de resultado)
+  Render: node render.mjs filmes/04-marca-de-verdade/index.html [--formato quadrado|vertical]
+-->
+<style>
+  @font-face { font-family: 'DM Sans'; src: url('../../assets/fonts/DMSans-variavel-latin.woff2') format('woff2'); font-weight: 100 1000; }
+  html, body { margin: 0; background: #FFF8F1; }
+  canvas { display: block; }
+</style>
+<canvas id="c"></canvas>
+<script>
+'use strict';
+
+// ---------------------------------------------------------------- formato e tempo
+const FORMAT = new URLSearchParams(location.search).get('formato') || 'horizontal';
+const V = FORMAT === 'vertical', Q = FORMAT === 'quadrado', HZ = !V && !Q, NARROW = !HZ;
+const W = HZ ? 1920 : 1080, H = V ? 1920 : 1080;
+const FPS = 30, DUR = 20, BPM = 120, BEAT = 60 / BPM, BAR = 4 * BEAT, E8 = BEAT / 2, S16 = BEAT / 4;
+const b = (n) => n * BEAT;
+window.FILM = { width: W, height: H, fps: FPS, duration: DUR };
+
+// chamada final da assinatura: a chamada real do site, aprovada para este filme
+const CHAMADA = 'Pronto pra nunca mais perder uma encomenda?';
+
+// ---------------------------------------------------------------- marca (variáveis CSS do site)
+const OR = '#EA6E1A', OR_D = '#C05810', OR_P = '#FFF0E8', INK = '#2A1F18', INK2 = '#6B5C4E', INK3 = '#A8957F';
+const CREAM = '#FFF8F1', WHITE = '#FFFFFF';
+const SANS = '"DM Sans"';
+const PIN = new Path2D('M50 22c-10 0-18 8-18 18 0 13 18 38 18 38s18-25 18-38c0-10-8-18-18-18zm0 25a7 7 0 1 1 0-14 7 7 0 0 1 0 14z');
+const LOGO_O = { x: 87.5, y: 93, r: 17 };   // furo do "O" no logo-lokal.png (320x154)
+
+// pontos medidos nas capturas (px da captura 3x)
+const SPOT = {
+  hojeLinha: NARROW ? [93, 317, 433, 417] : [70, 300, 662, 352],     // "Você precisa estar em casa" no cartão HOJE
+  carteiraBotao: [84, 267, 697, 361],                                 // "Adicionar saldo via Pix"
+  carteiraPix: [52, 665, 732, 786],                                   // linha "Recarga via Pix" no histórico
+  encomendaBotao: [44, 1190, 735, 1295],                              // "Pagar R$ 7,90 e gerar QR Code"
+  retiradaQR: [163, 383, 615, 835],
+  retiradaCopiar: [574, 1077, 703, 1117],
+};
+
+// ---------------------------------------------------------------- utilidades puras
+const clamp = (x, a = 0, z = 1) => Math.min(z, Math.max(a, x));
+const prog = (t, a, z) => clamp((t - a) / (z - a));
+const lerp = (a, z, k) => a + (z - a) * k;
+const inCubic = (k) => k ** 3;
+const inOutCubic = (k) => (k < 0.5 ? 4 * k ** 3 : 1 - (-2 * k + 2) ** 3 / 2);
+const bump = (t, a, d) => Math.sin(Math.PI * prog(t, a, a + d));
+function cubicBezier(x1, y1, x2, y2) {
+  const bz = (p, q, t) => 3 * p * (1 - t) ** 2 * t + 3 * q * (1 - t) * t * t + t ** 3;
+  return (x) => {
+    if (x <= 0) return 0;
+    if (x >= 1) return 1;
+    let lo = 0, hi = 1, t = x;
+    for (let i = 0; i < 24; i++) { t = (lo + hi) / 2; bz(x1, x2, t) < x ? (lo = t) : (hi = t); }
+    return bz(y1, y2, t);
+  };
+}
+const easeOut = cubicBezier(0.22, 1, 0.36, 1);      // --ease-out do site
+const spring = cubicBezier(0.34, 1.4, 0.64, 1);     // --ease-spring do site
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// ---------------------------------------------------------------- arquivos
+const cv = document.getElementById('c');
+cv.width = W; cv.height = H;
+const ctx = cv.getContext('2d');
+const IMG = {};
+const m = NARROW ? '-m' : '';
+const FILES = {
+  logo: '../../assets/logo-lokal.png',
+  titulo: `../../assets/capturas/hero-titulo${m}.png`, lead: `../../assets/capturas/hero-lead${m}.png`,
+  aviso: '../../assets/capturas/hero-aviso.png', heroApp: '../../assets/capturas/hero-app.png',
+  hoje: `../../assets/capturas/vs-hoje${m}.png`, lokal: `../../assets/capturas/vs-lokal${m}.png`,
+  faqF: `../../assets/capturas/faq-aviso-fechado${m}.png`, faqA: `../../assets/capturas/faq-aviso-aberto${m}.png`,
+  encomenda: '../../assets/capturas/app-encomenda.png', carteira: '../../assets/capturas/app-carteira.png',
+  retirada: '../../assets/capturas/app-retirada.png',
+};
+const assetsReady = Promise.all(Object.entries(FILES).map(([k, src]) => new Promise((res, rej) => {
+  const im = new Image();
+  im.onload = () => res();
+  im.onerror = () => rej(new Error(`não carregou ${src}`));
+  im.src = src;
+  IMG[k] = im;
+})).concat([400, 500, 700, 800].map((w) => document.fonts.load(`${w} 80px ${SANS}`))));
+
+// ---------------------------------------------------------------- desenho básico
+function font(weight, size) { ctx.font = `${weight} ${size}px ${SANS}`; }
+function text(s, x, y, color, align = 'left') { ctx.fillStyle = color; ctx.textAlign = align; ctx.fillText(s, x, y); }
+function clipRect(x, y, w, h) { ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip(); }
+function shadow(blur, dy, a) { ctx.shadowColor = `rgba(42,31,24,${a})`; ctx.shadowBlur = blur; ctx.shadowOffsetY = dy; }
+const noShadow = () => shadow(0, 0, 0);
+function bg(c) { ctx.fillStyle = c; ctx.fillRect(0, 0, W, H); }
+function wrap(str, size, weight, maxW) {
+  font(weight, size);
+  const sp = ctx.measureText(' ').width, lines = [];
+  let cur = [], curW = 0;
+  for (const word of str.split(' ')) {
+    const w = ctx.measureText(word).width;
+    if (cur.length && curW + sp + w > maxW) { lines.push(cur.join(' ')); cur = []; curW = 0; }
+    cur.push(word); curW = cur.length > 1 ? curW + sp + w : w;
+  }
+  if (cur.length) lines.push(cur.join(' '));
+  return lines;
+}
+/** Texto que sobe de dentro de uma máscara (nada entra com fade). */
+function rise(s, x, y, size, weight, color, k, align = 'left') {
+  if (k <= 0) return;
+  font(weight, size);
+  const w = ctx.measureText(s).width, left = align === 'center' ? x - w / 2 : x;
+  ctx.save(); clipRect(left - 20, y - size * 1.02, w + 40, size * 1.36);
+  text(s, x, y + size * 1.15 * (1 - easeOut(k)), color, align); ctx.restore();
+}
+/** Parágrafo; "\n" é uma quebra escolhida (o texto não muda). Devolve o nº de linhas. */
+function para(str, x, y, size, weight, color, maxW, lh, u, t0, stagger = S16 / 2, align = 'left') {
+  const lines = str.split('\n').flatMap((seg) => wrap(seg, size, weight, maxW));
+  lines.forEach((ln, i) => rise(ln, x, y + i * lh, size, weight, color, prog(u, t0 + i * stagger, t0 + i * stagger + 0.42), align));
+  return lines.length;
+}
+/** Captura real, desenhada com largura w a partir do canto (x, y); devolve a altura. */
+function cap(key, x, y, w, { scale = 1, rot = 0, clipH = null, shadowA = 0 } = {}) {
+  const im = IMG[key], h = (w * im.height) / im.width;
+  ctx.save();
+  ctx.translate(x + w / 2, y + h / 2); ctx.rotate(rot); ctx.scale(scale, scale); ctx.translate(-w / 2, -h / 2);
+  if (clipH !== null) clipRect(-40, -40, w + 80, clipH + 40);
+  if (shadowA) shadow(60, 22, shadowA);
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(im, 0, 0, w, h);
+  ctx.restore();
+  return h;
+}
+/** Converte um ponto/retângulo medido na captura para a tela, dada a posição e largura desenhadas. */
+const mapRect = (key, [x0, y0, x1, y1], x, y, w) => { const s = w / IMG[key].width; return [x + x0 * s, y + y0 * s, x + x1 * s, y + y1 * s]; };
+const center = (r) => [(r[0] + r[2]) / 2, (r[1] + r[3]) / 2];
+
+function pin(x, tipY, h, color = OR, sx = 1, sy = 1) {
+  const k = h / 56;
+  ctx.save(); ctx.translate(x, tipY); ctx.scale(k * sx, k * sy); ctx.translate(-50, -78);
+  ctx.fillStyle = color; ctx.fill(PIN, 'evenodd'); ctx.restore();
+}
+function speedLines(x, y, dx, dy, len, s, k) {
+  if (k <= 0) return;
+  const nx = -dy, ny = dx;
+  ctx.lineCap = 'round'; ctx.strokeStyle = OR; ctx.lineWidth = s * 0.45;
+  [[-1, 0.7], [0, 1], [1, 0.55]].forEach(([o, f]) => {
+    const l = len * f * k, ox = x + nx * o * s, oy = y + ny * o * s;
+    ctx.beginPath(); ctx.moveTo(ox - dx * s * 0.6, oy - dy * s * 0.6); ctx.lineTo(ox - dx * (s * 0.6 + l), oy - dy * (s * 0.6 + l)); ctx.stroke();
+  });
+}
+
+// cursor: a única coisa "de interface" que não é captura (é o cursor de quem usa)
+const CUR_S = HZ ? 1.9 : 1.7;
+function cursor(x, y, pressK = 0) {
+  const s = CUR_S * (1 - 0.14 * pressK);
+  ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
+  shadow(10, 3, 0.25);
+  ctx.beginPath();
+  [[0, 0], [0, 26], [6.5, 20], [10.5, 29.5], [14.5, 27.8], [10.6, 18.6], [18.5, 18.6]].forEach(([px, py], i) => (i ? ctx.lineTo(px, py) : ctx.moveTo(px, py)));
+  ctx.closePath();
+  ctx.fillStyle = INK; ctx.fill(); noShadow();
+  ctx.lineWidth = 2.2; ctx.strokeStyle = WHITE; ctx.lineJoin = 'round'; ctx.stroke();
+  ctx.restore();
+}
+/** Anel do clique (traço, sem brilho). */
+function ripple(x, y, u, tClick) {
+  const k = prog(u, tClick, tClick + 0.45);
+  if (k <= 0 || k >= 1) return;
+  ctx.beginPath(); ctx.arc(x, y, lerp(10, 70, easeOut(k)), 0, Math.PI * 2);
+  ctx.lineWidth = lerp(6, 1.5, k); ctx.strokeStyle = OR; ctx.stroke();
+}
+/** Estado "pressionado" por cima do botão real: um véu de tinta curto. */
+function pressVeil(r, u, tClick, radius) {
+  const k = bump(u, tClick, 0.22);
+  if (k <= 0) return;
+  ctx.beginPath(); ctx.roundRect(r[0], r[1], r[2] - r[0], r[3] - r[1], radius);
+  ctx.fillStyle = `rgba(42,31,24,${0.16 * k})`; ctx.fill();
+}
+/** Caminho do cursor: entra de fora e desliza até o alvo, com curva da marca. */
+function cursorPath(u, t0, t1, from, to) {
+  const k = easeOut(prog(u, t0, t1));
+  const arc = Math.sin(Math.PI * k) * 60;
+  return [lerp(from[0], to[0], k), lerp(from[1], to[1], k) - arc];
+}
+/** Cantos de leitura em volta de algo (marcação, não interface). */
+function corners(r, k, pad = 18) {
+  if (k <= 0) return;
+  const [x0, y0, x1, y1] = [r[0] - pad, r[1] - pad, r[2] + pad, r[3] + pad], L = (x1 - x0) * 0.22 * easeOut(k);
+  ctx.lineWidth = 10; ctx.strokeStyle = OR; ctx.lineCap = 'round';
+  for (const [cx, cy, sx, sy] of [[x0, y0, 1, 1], [x1, y0, -1, 1], [x0, y1, 1, -1], [x1, y1, -1, -1]]) {
+    ctx.beginPath(); ctx.moveTo(cx, cy + sy * L); ctx.lineTo(cx, cy); ctx.lineTo(cx + sx * L, cy); ctx.stroke();
+  }
+}
+function highlight(r, k, radius = 24) {
+  if (k <= 0) return;
+  ctx.beginPath(); ctx.roundRect(r[0] - 14, r[1] - 10, (r[2] - r[0] + 28) * easeOut(k), r[3] - r[1] + 20, radius);
+  ctx.lineWidth = 7; ctx.strokeStyle = OR; ctx.stroke();
+}
+
+// ---------------------------------------------------------------- 1 · gancho (0-3 s)
+const WORDS = ['VOCÊ', 'PRECISA', 'ESTAR', 'EM', 'CASA'];
+const MARGIN = HZ ? 140 : 80;
+function wordSize(word) {
+  font(800, 100);
+  const w = ctx.measureText(word).width, maxW = W - 2 * MARGIN;
+  return Math.min(HZ ? 520 : V ? 420 : 360, (maxW / w) * 100);
+}
+function hookWord(i, v) {
+  const word = WORDS[i], size = wordSize(word), color = i === 4 ? OR : INK;
+  font(800, size);
+  const ww = ctx.measureText(word).width, x0 = (W - ww) / 2, base = H / 2 + size * 0.36;
+  const chars = [...word];
+  const pos = []; let acc = 0;
+  for (const ch of chars) { const cw = ctx.measureText(ch).width; pos.push([acc, cw]); acc += cw; }
+  ctx.save();
+  if (i === 0) {          // VOCÊ: letras sobem da máscara em cascata
+    clipRect(0, base - size * 1.0, W, size * 1.25);
+    chars.forEach((ch, j) => { const k = easeOut(prog(v, -0.12 + j * 0.03, 0.14 + j * 0.03)); text(ch, x0 + pos[j][0], base + size * (1 - k), color); });
+  } else if (i === 1) {   // PRECISA: estica a partir do centro
+    const k = prog(v, 0, 0.26);
+    ctx.translate(W / 2, base); ctx.scale(lerp(0.25, 1, spring(k)), lerp(1.4, 1, easeOut(k)));
+    text(word, -ww / 2, 0, color);
+  } else if (i === 2) {   // ESTAR: letras caem com quique
+    chars.forEach((ch, j) => { const k = spring(prog(v, -0.04 + j * 0.035, 0.22 + j * 0.035)); text(ch, x0 + pos[j][0], base - (1 - k) * size * 1.3, color); });
+  } else if (i === 3) {   // EM: cresce girando
+    const k = spring(prog(v, -0.03, 0.26));
+    ctx.translate(W / 2, base - size * 0.35); ctx.rotate((1 - k) * -0.4); ctx.scale(k, k);
+    text(word, -ww / 2, size * 0.35, color);
+  } else {                // CASA: entra rápido da direita com os traços de velocidade
+    const k = easeOut(prog(v, -0.04, 0.22)), dx = (1 - k) * W * 0.7;
+    speedLines(x0 + dx - 30, base - size * 0.36, 1, 0, size * 1.2, size * 0.09, 1 - k);
+    text(word, x0 + dx, base, color);
+  }
+  ctx.restore();
+}
+/** Cartões reais HOJE e COM A LOKAL (posições compartilhadas pelas cenas 1 e 2). */
+const CARDS = HZ ? { w: 800, hoje: [140, 190], lokal: [980, 190] }
+  : Q ? { w: 400, hoje: [110, 150], lokal: [570, 150] }
+    : { w: 440, hoje: [80, 520], lokal: [560, 520] };
+function scene1(u) {
+  bg(CREAM);
+  if (u < b(5)) { hookWord(Math.floor(u / BEAT), u % BEAT); return; }
+  // batida 6: as cinco palavras viram a linha real do cartão "HOJE"
+  const v = u - b(5), k = spring(prog(v, -0.02, 0.36));
+  const [x, y] = CARDS.hoje, s = lerp(0.6, 1, k);
+  cap('hoje', x, y, CARDS.w, { scale: s, shadowA: 0.08 });
+  if (k > 0.98) highlight(mapRect('hoje', SPOT.hojeLinha, x, y, CARDS.w), prog(v, 0.2, 0.42), 18);
+}
+
+// ---------------------------------------------------------------- 2 · o produto (3-7 s)
+const HERO = HZ
+  ? { titulo: [110, 320, 1040], lead: [110, 600, 1040], app: [1240, 90, 900], aviso: [1070, 250, 410] }
+  : Q ? { titulo: [130, 60, 820], lead: null, app: [355, 300, 740], aviso: [80, 470, 360] }
+    : { titulo: [80, 300, 920], lead: [80, 560, 920], app: [318, 740, 820], aviso: [120, 960, 400] };
+function scene2(u) {
+  bg(CREAM);
+  if (u < b(2)) {
+    // HOJE (já na tela) e COM A LOKAL batendo ao lado na batida 7
+    const [hx, hy] = CARDS.hoje, [lx, ly] = CARDS.lokal;
+    cap('hoje', hx, hy, CARDS.w, { shadowA: 0.08 });
+    highlight(mapRect('hoje', SPOT.hojeLinha, hx, hy, CARDS.w), 1, 18);
+    const k = prog(u, -0.04, 0.34);
+    cap('lokal', lx + (1 - easeOut(k)) * W * 0.6, ly, CARDS.w, { scale: lerp(1.1, 1, spring(k)), rot: (1 - easeOut(k)) * 0.08, shadowA: 0.14 });
+    return;
+  }
+  // batidas 9-14: o hero do site se monta peça por peça
+  const v = u - b(2);
+  const [ax, ay, ah] = HERO.app, aw = (ah * IMG.heroApp.width) / IMG.heroApp.height;
+  const kApp = prog(v, -0.04, 0.42);
+  const push = 1 + 0.05 * easeOut(prog(v, b(4), b(6)));
+  ctx.save(); ctx.translate(W / 2, H / 2); ctx.scale(push, push); ctx.translate(-W / 2, -H / 2);
+  cap('heroApp', ax, ay + (1 - easeOut(kApp)) * H * 0.7, aw, { rot: (1 - spring(kApp)) * 0.1, shadowA: 0.16 });
+  const [tx, ty, tw] = HERO.titulo, kt = prog(v, b(1) - 0.04, b(1) + 0.36);
+  if (kt > 0) {
+    const th = (tw * IMG.titulo.height) / IMG.titulo.width;
+    ctx.save(); clipRect(tx - 20, ty - 10, tw + 40, th + 20); cap('titulo', tx, ty + th * 1.1 * (1 - easeOut(kt)), tw); ctx.restore();
+  }
+  if (HERO.lead) {
+    const [lx, ly, lw] = HERO.lead, kl = prog(v, b(2) - 0.04, b(2) + 0.36);
+    if (kl > 0) {
+      const lh = (lw * IMG.lead.height) / IMG.lead.width;
+      ctx.save(); clipRect(lx - 20, ly - 10, lw + 40, lh + 20); cap('lead', lx, ly + lh * 1.1 * (1 - easeOut(kl)), lw); ctx.restore();
+    }
+  }
+  const [cx, cy, cw] = HERO.aviso, kc = prog(v, b(3) - 0.04, b(3) + 0.34);
+  if (kc > 0) cap('aviso', cx, cy, cw, { scale: spring(kc), rot: (1 - spring(kc)) * -0.2, shadowA: 0.12 });
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------- 3 a 5 · os três recursos (7-16 s)
+const CAP = HZ ? { x: 140, y: 360, size: 86, maxW: 820 } : Q ? { x: 80, y: 120, size: 60, maxW: 920 } : { x: 80, y: 360, size: 74, maxW: 920 };
+const NOTE = 'Telas do aplicativo com dados de exemplo.';
+function caption(n, label, u, note = false) {
+  const { x, y, size, maxW } = CAP;
+  const kn = spring(prog(u, -0.04, 0.3));
+  if (kn > 0) {
+    const r = size * 0.42;
+    ctx.save(); ctx.translate(x + r, y - size * 1.25 - r * 0.2); ctx.scale(kn, kn);
+    ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fillStyle = OR; ctx.fill();
+    font(800, r * 1.1); ctx.textBaseline = 'middle'; text(String(n), 0, r * 0.06, WHITE, 'center'); ctx.textBaseline = 'alphabetic';
+    ctx.restore();
+  }
+  const lines = para(label, x, y, size, 800, INK, maxW, size * 1.08, u, 0.02);
+  if (note) para(NOTE, x, y + lines * size * 1.08 + (HZ ? 40 : 26), HZ ? 32 : 30, 500, INK3, HZ ? 760 : 920, 40, u, b(1));
+}
+const PHONE = HZ ? { x: 1180, y: 70, h: 940 } : Q ? { x: 324, y: 250, h: 800 } : { x: 300, y: 600, h: 960 };
+const phoneW = (h) => (h * IMG.carteira.width) / IMG.carteira.height;
+
+function scene3(u) {   // 1 · "Aviso no WhatsApp quando chega": clique real no FAQ
+  bg(CREAM);
+  caption(1, 'Aviso no WhatsApp\nquando chega', u);
+  const fw = HZ ? 1640 : 920, fx = (W - fw) / 2, fy = HZ ? 600 : Q ? 360 : 700;
+  const kIn = prog(u, b(0.5) - 0.04, b(0.5) + 0.36);
+  const hF = (fw * IMG.faqF.height) / IMG.faqF.width, hA = (fw * IMG.faqA.height) / IMG.faqA.width;
+  const tClick = b(2), open = easeOut(prog(u, tClick + 0.04, tClick + 0.42));
+  const y = fy + (1 - easeOut(kIn)) * 220;
+  if (kIn > 0) {
+    if (u < tClick + 0.04) cap('faqF', fx, y, fw, { shadowA: 0.06 });
+    else cap('faqA', fx, y, fw, { clipH: lerp(hF, hA, open), shadowA: 0.06 });
+    pressVeil([fx, y, fx + fw, y + hF], u, tClick, 26);
+  }
+  const target = [fx + fw * 0.62, fy + hF * 0.55];
+  if (u > b(1)) {
+    const p = cursorPath(u, b(1), tClick - 0.02, [W + 60, H * 0.9], target);
+    const leave = easeOut(prog(u, b(4), b(5.5)));
+    ripple(...target, u, tClick);
+    cursor(p[0] + leave * 260, p[1] + leave * 240, bump(u, tClick, 0.2));
+  }
+}
+function scene4(u) {   // 2 · "Paga pelo app, via Pix": clique real em "Adicionar saldo via Pix"
+  bg(CREAM);
+  caption(2, HZ ? 'Paga pelo app,\nvia Pix' : 'Paga pelo app, via Pix', u, true);
+  const h = PHONE.h, w = phoneW(h), k = prog(u, -0.04, 0.44);
+  const x = PHONE.x, y = PHONE.y + (1 - easeOut(k)) * H * 0.8;
+  cap('carteira', x, y, w, { rot: (1 - spring(k)) * 0.08, shadowA: 0.16 });
+  const btn = mapRect('carteira', SPOT.carteiraBotao, x, y, w), tClick = b(2);
+  pressVeil(btn, u, tClick, 20);
+  highlight(mapRect('carteira', SPOT.carteiraPix, x, y, w), prog(u, b(3), b(3) + 0.35), 22);
+  if (u > b(1)) {
+    const target = center(btn), p = cursorPath(u, b(1), tClick - 0.02, [x - 300, y + h * 0.9], target);
+    ripple(...target, u, tClick);
+    const leave = easeOut(prog(u, b(3), b(4)));
+    cursor(p[0] + leave * 120, p[1] + leave * h * 0.36, bump(u, tClick, 0.2));
+  }
+}
+function scene5(u) {   // 3 · "Retira com QR Code": paga, a tela vira a retirada com o QR, copia a palavra-chave
+  bg(CREAM);
+  caption(3, 'Retira com QR Code', u, true);
+  const h = PHONE.h, w = phoneW(h), k = prog(u, -0.04, 0.44);
+  const x = PHONE.x, y = PHONE.y + (1 - easeOut(k)) * H * 0.8;
+  const tPay = b(1.5), tSwap = b(2), tCopy = b(4);
+  const swap = inOutCubic(prog(u, tSwap, tSwap + 0.34)), gap = w + (HZ ? 120 : 80);
+  // no 16:9 a troca acontece dentro da área do celular: a tela que sai some por uma borda, sem passar sobre a legenda
+  const masked = HZ && swap > 0 && swap < 1;
+  if (masked) { ctx.save(); clipRect(x - 90, 0, W - x + 90, H); }
+  if (swap < 1) {
+    cap('encomenda', x - swap * gap, y, w, { rot: (1 - spring(k)) * 0.08, shadowA: 0.16 });
+    pressVeil(mapRect('encomenda', SPOT.encomendaBotao, x - swap * gap, y, w), u, tPay, 22);
+  }
+  if (swap > 0) cap('retirada', x + (1 - swap) * gap, y, w, { shadowA: 0.16 });
+  if (masked) ctx.restore();
+  const qr = mapRect('retirada', SPOT.retiradaQR, x, y, w), copy = mapRect('retirada', SPOT.retiradaCopiar, x, y, w);
+  if (swap >= 1) {
+    corners(qr, prog(u, b(3), b(3) + 0.3) * (1 + 0.06 * Math.sin((u - b(3)) * Math.PI * 4) * (u > b(3) ? 1 : 0)));
+    pressVeil([copy[0] - 14, copy[1] - 16, copy[2] + 14, copy[3] + 16], u, tCopy, 16);
+  }
+  if (u > b(0.5)) {
+    const pay = center(mapRect('encomenda', SPOT.encomendaBotao, x, y, w));
+    let p = cursorPath(u, b(0.5), tPay - 0.02, [x + w + 280, y + h * 0.4], pay);
+    if (u > tSwap) p = cursorPath(u, b(3), tCopy - 0.02, pay, center(copy));
+    ripple(...pay, u, tPay); ripple(...center(copy), u, tCopy);
+    cursor(...p, bump(u, tPay, 0.2) + bump(u, tCopy, 0.2));
+  }
+  if (u > BEAT * 6 - E8) pinDrop(u - BEAT * 6);   // a queda do pin da assinatura começa aqui
+}
+
+// ---------------------------------------------------------------- 6 · assinatura (16-20 s)
+const SIG = HZ ? { logoW: 640, logo: [960, 380], cta: [960, 700], size: 68, maxW: 1700, url: 800, aviso: [1190, 190, 360] }
+  : Q ? { logoW: 600, logo: [540, 360], cta: [540, 650], size: 56, maxW: 940, url: 830, aviso: [640, 150, 330] }
+    : { logoW: 640, logo: [540, 780], cta: [540, 1110], size: 64, maxW: 900, url: 1350, aviso: [600, 520, 380] };
+function logoGeom() {
+  const lw = SIG.logoW, lh = (lw * 154) / 320, sc = lw / 320;
+  const lx = SIG.logo[0] - lw / 2, ly = SIG.logo[1] - lh / 2, pinH = LOGO_O.r * sc * 3.3;
+  const ox = lx + LOGO_O.x * sc, oy = ly + LOGO_O.y * sc;
+  return { lw, lh, lx, ly, ox, oy, pinH, tip: oy + (78 - 40) * (pinH / 56) };
+}
+function pinDrop(tau) {
+  const g = logoGeom(), kf = prog(tau, -E8, E8), kOut = prog(tau, E8, E8 + 0.16);
+  if (kOut >= 1) return;
+  const y = lerp(g.tip - (V ? 420 : 330), g.tip, kf * kf);
+  const sq = Math.max(0, 1 - Math.abs(tau - E8) / 0.08) * (tau >= E8 ? 1 : 0);
+  if (kf < 1) speedLines(g.ox, y - g.pinH * 0.75, 0, 1, 220, 12, 1);
+  pin(g.ox, y, g.pinH * (1 - kOut), OR, 1 + 0.3 * sq, 1 - 0.25 * sq);
+}
+function scene6(u) {
+  bg(CREAM);
+  const push = 1 + 0.035 * easeOut(prog(u, 0, 4));
+  ctx.save(); ctx.translate(W / 2, H / 2); ctx.scale(push, push); ctx.translate(-W / 2, -H / 2);
+  const { lw, lh, lx, ly, ox, oy } = logoGeom();
+  const kR = easeOut(prog(u, E8, E8 + 0.5));
+  if (kR > 0) {
+    ctx.save(); ctx.beginPath(); ctx.arc(ox, oy, 2 * lw * kR, 0, Math.PI * 2); ctx.clip();
+    ctx.imageSmoothingQuality = 'high'; ctx.drawImage(IMG.logo, lx, ly + 18 * (1 - kR), lw, lh); ctx.restore();
+  }
+  pinDrop(u);
+  const n = para(V || Q ? CHAMADA.replace('perder ', 'perder\n') : CHAMADA, SIG.cta[0], SIG.cta[1], SIG.size, 700, INK, SIG.maxW, SIG.size * 1.2, u, b(2) - 0.06, S16 / 2, 'center');
+  rise('vaidelokal.com.br', SIG.cta[0], HZ ? SIG.cta[1] + n * SIG.size * 1.2 + 40 : SIG.url, 52, 700, OR_D, prog(u, b(3) - 0.06, b(3) + 0.4), 'center');
+  const [cx, cy, cw] = SIG.aviso, kc = prog(u, b(4) - 0.04, b(4) + 0.34);
+  if (kc > 0) cap('aviso', cx, cy, cw, { scale: spring(kc), rot: -0.06 * spring(kc), shadowA: 0.12 });
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------- montagem
+const ACTS = [[0, scene1], [3, scene2], [7, scene3], [10, scene4], [13, scene5], [16, scene6]];
+const PUSH = 0.3;   // empurrão entre o produto e os recursos (cenas 3, 4 e 5): nada de quadro vazio
+function draw(t) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; noShadow();
+  let i = ACTS.length - 1;
+  while (i > 0 && t < ACTS[i][0] - 1e-9) i--;
+  const u = t - ACTS[i][0], k = easeOut(prog(u, 0, PUSH));
+  if (i >= 2 && i <= 4 && k < 1) {
+    const prevLen = ACTS[i][0] - ACTS[i - 1][0];
+    ctx.save(); ctx.translate(-W * k, 0); ACTS[i - 1][1](prevLen - 1e-4); ctx.restore();
+    ctx.save(); ctx.translate(W * (1 - k), 0); ACTS[i][1](u); ctx.restore();
+    return;
+  }
+  ACTS[i][1](u);
+}
+window.seek = async (t) => { await assetsReady; draw(t); };
+
+// ---------------------------------------------------------------- trilha (sintetizada, 120 BPM)
+const NOTE_HZ = (n) => 440 * 2 ** ((n - 69) / 12);
+window.renderAudio = async (sr) => {
+  const ac = new OfflineAudioContext(2, Math.ceil(DUR * sr), sr);
+  const rnd = mulberry32(0x4a1);
+  const noise = ac.createBuffer(1, sr * 3, sr);
+  { const d = noise.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = rnd() * 2 - 1; }
+  const comp = new DynamicsCompressorNode(ac, { threshold: -18, knee: 8, ratio: 3, attack: 0.004, release: 0.12 });
+  comp.connect(ac.destination);
+  const bus = new GainNode(ac, { gain: 0.6 }); bus.connect(comp);
+  const echo = new DelayNode(ac, { delayTime: E8 * 1.5, maxDelayTime: 1 });
+  const fb = new GainNode(ac, { gain: 0.25 }), wet = new GainNode(ac, { gain: 0.22 });
+  echo.connect(fb).connect(echo); echo.connect(wet).connect(bus);
+  const send = (node, pan = 0, fx = 0) => {
+    const p = new StereoPannerNode(ac, { pan }); node.connect(p).connect(bus);
+    if (fx) p.connect(new GainNode(ac, { gain: fx })).connect(echo);
+  };
+  const env = (t, a, d, v) => {
+    const g = new GainNode(ac, { gain: 0 });
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v, t + a); g.gain.exponentialRampToValueAtTime(1e-4, t + a + d);
+    return g;
+  };
+  const noiseAt = (t, d) => { const s = new AudioBufferSourceNode(ac, { buffer: noise }); s.start(t, (t * 0.37) % 2); s.stop(t + d); return s; };
+  const osc = (type, f, t, d) => { const o = new OscillatorNode(ac, { type, frequency: f }); o.start(t); o.stop(t + d); return o; };
+  const filt = (type, frequency, Q_ = 1) => new BiquadFilterNode(ac, { type, frequency, Q: Q_ });
+
+  const kick = (t, v = 0.85) => { const o = osc('sine', 155, t, 0.4); o.frequency.setValueAtTime(155, t); o.frequency.exponentialRampToValueAtTime(44, t + 0.1); const g = env(t, 0.002, 0.33, v); o.connect(g); send(g); };
+  const clap = (t, v = 0.24) => {
+    const g = new GainNode(ac, { gain: 0 });
+    for (const o of [0, 0.01, 0.02]) { g.gain.setValueAtTime(v, t + o); g.gain.exponentialRampToValueAtTime(v * 0.25, t + o + 0.008); }
+    g.gain.setValueAtTime(v * 0.7, t + 0.028); g.gain.exponentialRampToValueAtTime(1e-4, t + 0.2);
+    noiseAt(t, 0.25).connect(filt('bandpass', 1700, 0.9)).connect(g); send(g, -0.08, 0.12);
+  };
+  const hat = (t, v = 0.05) => { const g = env(t, 0.002, 0.035, v); noiseAt(t, 0.05).connect(filt('highpass', 7500)).connect(g); send(g, 0.22); };
+  const bass = (t, n, d = 0.2, v = 0.3) => { const o = osc('sawtooth', NOTE_HZ(n), t, d + 0.05), s = osc('sine', NOTE_HZ(n), t, d + 0.05); const g = env(t, 0.004, d, v); o.connect(filt('lowpass', 420, 1.2)).connect(g); s.connect(g); send(g); };
+  const stab = (t, notes, v = 0.06, d = 0.3, cut = 3500) => {
+    const lp = filt('lowpass', cut, 3); lp.frequency.setValueAtTime(cut, t); lp.frequency.exponentialRampToValueAtTime(300, t + d);
+    const g = env(t, 0.003, d, v); lp.connect(g); send(g, 0, 0.2);
+    for (const n of notes) for (const det of [-7, 7]) { const o = osc('sawtooth', NOTE_HZ(n), t, d + 0.05); o.detune.value = det; o.connect(lp); }
+  };
+  const bell = (t, n, v = 0.08, d = 1, pan = 0, ratio = 3.5) => {
+    const f = NOTE_HZ(n), car = osc('sine', f, t, d + 0.1), mod = osc('sine', f * ratio, t, d + 0.1);
+    const mg = new GainNode(ac, { gain: 0 }); mg.gain.setValueAtTime(f * 1.6, t); mg.gain.exponentialRampToValueAtTime(f * 0.04, t + 0.4);
+    mod.connect(mg).connect(car.frequency); const g = env(t, 0.003, d, v); car.connect(g); send(g, pan, 0.3);
+  };
+  const marimba = (t, n, v = 0.1, pan = 0) => { const f = NOTE_HZ(n), a = osc('sine', f, t, 0.5), c = osc('sine', f * 4, t, 0.15); const g = env(t, 0.002, 0.35, v), g2 = env(t, 0.001, 0.06, v * 0.4); a.connect(g); c.connect(g2); send(g, pan, 0.2); send(g2, pan); };
+  const click = (t, v = 0.22, pan = 0) => {   // clique de interface
+    const g = env(t, 0.0005, 0.012, v); noiseAt(t, 0.02).connect(filt('bandpass', 3800, 3)).connect(g); send(g, pan);
+    const o = osc('sine', 2600, t, 0.03), g2 = env(t, 0.0005, 0.018, v * 0.5); o.connect(g2); send(g2, pan);
+  };
+  const whoosh = (t0, t1, v = 0.12, f0 = 400, f1 = 5000) => {   // termina NA batida
+    const bp = filt('bandpass', f0, 1.4); bp.frequency.setValueAtTime(f0, t0); bp.frequency.exponentialRampToValueAtTime(f1, t1);
+    const g = new GainNode(ac, { gain: 0 }); g.gain.setValueAtTime(1e-4, t0); g.gain.exponentialRampToValueAtTime(v, t1 - 0.02); g.gain.exponentialRampToValueAtTime(1e-4, t1 + 0.06);
+    noiseAt(t0, t1 - t0 + 0.08).connect(bp).connect(g); send(g);
+  };
+  const ping = (t, v = 0.1) => { bell(t, 88, v, 0.6, 0.15, 2); bell(t + S16, 93, v * 0.9, 0.8, 0.15, 2); };
+  const pop = (t, f0 = 900, f1 = 300, v = 0.18, pan = 0) => { const o = osc('sine', f0, t, 0.15); o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + 0.07); const g = env(t, 0.002, 0.11, v); o.connect(g); send(g, pan, 0.1); };
+  // "erro": dois tons, uma fusa de distância
+  const error = (t, v = 0.16) => { for (const [o, f] of [[0, 220], [S16 / 2, 185]]) { const s = osc('square', f, t + o, 0.08), g = env(t + o, 0.002, 0.07, v); s.connect(filt('lowpass', 1200)).connect(g); send(g); } };
+  const fall = (t0, t1, v = 0.05) => { const o = osc('sine', 1800, t0, t1 - t0); o.frequency.exponentialRampToValueAtTime(500, t1); const g = new GainNode(ac, { gain: 0 }); g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(v, t0 + 0.05); g.gain.setValueAtTime(v, t1 - 0.02); g.gain.linearRampToValueAtTime(0, t1); o.connect(g); send(g, 0, 0.15); };
+
+  // acordes por compasso (2 s): lá menor, fá, dó, sol...
+  const CH = [[45, [69, 72, 76]], [41, [65, 69, 72]], [48, [64, 67, 72]], [43, [67, 71, 74]], [45, [69, 72, 76]],
+    [41, [65, 69, 72]], [48, [64, 67, 72]], [43, [67, 71, 74]], [41, [65, 69, 72]], [48, [64, 67, 72]]];
+  const chordAt = (t) => CH[Math.min(9, Math.floor(t / BAR))];
+
+  // 1 · gancho: cada palavra é um golpe; a sexta batida cai no cartão "HOJE" com o erro
+  for (let i = 0; i < 5; i++) { const t = b(i); kick(t, 1); stab(t, chordAt(t)[1], 0.07, 0.24); bass(t, chordAt(t)[0] - 12, 0.3, 0.3); }
+  whoosh(b(4) - 0.2, b(4), 0.1);             // CASA entra correndo e chega na batida
+  whoosh(b(5) - 0.25, b(5), 0.1); pop(b(5), 600, 300, 0.16); error(b(5) + E8);
+  // groove dos 3 aos 16 s
+  for (let s = b(6) / S16; s < 16 / S16; s++) {
+    const t = s * S16, beatIdx = Math.round(t / BEAT);
+    if (s % 4 === 0) kick(t, beatIdx === 6 ? 1 : 0.75);
+    if (s % 8 === 4) clap(t);
+    hat(t, s % 2 ? 0.05 : 0.03);
+    if (s % 2 === 0) bass(t, chordAt(t)[0] + (s % 4 ? 12 : 0), 0.2, s % 4 ? 0.18 : 0.28);
+    if (s % 8 === 0) marimba(t, chordAt(t)[1][2] + 12, 0.07);
+  }
+  // 2 · produto
+  whoosh(b(6) - 0.25, b(6), 0.14); stab(b(6), [69, 72, 76, 81], 0.08, 0.5, 5000);   // COM A LOKAL bate
+  whoosh(b(8) - 0.3, b(8), 0.12, 300, 3000);                                         // o celular sobe
+  pop(b(9), 1000, 400, 0.14, -0.3); pop(b(10), 1100, 450, 0.12, -0.3);               // título e apoio
+  ping(b(11));                                                                       // "Sua encomenda chegou!"
+  whoosh(b(13) - 0.3, b(14), 0.12);
+  // 3 a 5 · recursos: o cursor desliza (whoosh curto) e clica na batida
+  for (const [t0, clicks] of [[7, [b(2)]], [10, [b(2)]], [13, [b(1.5), b(4)]]]) {
+    bell(t0, 84, 0.06, 0.5); pop(t0, 900, 500, 0.12);
+    for (const c of clicks) { whoosh(t0 + c - 0.22, t0 + c, 0.05, 1500, 7000); click(t0 + c, 0.26, 0.2); }
+  }
+  marimba(7 + b(2) + E8, 81, 0.1);                       // FAQ abre
+  marimba(10 + b(3), 79, 0.1); marimba(10 + b(3) + S16, 84, 0.1);   // destaque da recarga via Pix
+  whoosh(13 + b(2) - 0.2, 13 + b(2) + S16, 0.1);         // a tela troca para a retirada
+  bell(13 + b(3), 91, 0.07, 0.6); bell(13 + b(3) + S16, 96, 0.06, 0.6);   // cantos do QR
+  // 6 · assinatura
+  fall(16 - E8, 16 + E8); kick(16, 0.8); pop(16 + E8, 1200, 300, 0.2);
+  bass(16 + E8, 36, 1.6, 0.3); bell(16 + E8, 72, 0.12, 1.2, -0.1, 2); bell(16 + BEAT, 79, 0.12, 1.2, 0.1, 2); bell(16 + b(2), 84, 0.1, 1.2, 0, 2);
+  stab(16 + b(2), [64, 67, 72, 76], 0.06, 0.8, 4500);
+  ping(16 + b(4), 0.09);
+  marimba(16 + b(6), 79, 0.07); marimba(19, 84, 0.06);
+  return ac.startRendering();
+};
+</script>
+</html>

@@ -214,7 +214,8 @@ async function openFilm(browser, file) {
     hasAudio: typeof window.renderAudio === 'function',
   }));
   if (!info.FILM || !info.hasSeek) {
-    throw new Error('A página precisa definir window.FILM = { width, height, fps, duration } e window.seek(t).');
+    const why = errors.length ? `\n  Erros na página:\n  - ${errors.join('\n  - ')}` : '';
+    throw new Error(`A página precisa definir window.FILM = { width, height, fps, duration } e window.seek(t).${why}`);
   }
   const { width, height, duration, fps = 30, beats } = info.FILM;
   if (!(width > 0 && height > 0 && width % 2 === 0 && height % 2 === 0)) {

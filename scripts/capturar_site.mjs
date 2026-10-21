@@ -11,7 +11,7 @@
  *
  * Uso: node scripts/capturar_site.mjs   (salva em assets/capturas/)
  */
-import { mkdir } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { chromium } from 'playwright-core';
 import puppeteer from 'puppeteer';
 
@@ -22,6 +22,8 @@ const SCALE = 3;
 const browser = await chromium.launch({ executablePath: await puppeteer.executablePath() });
 await mkdir(OUT, { recursive: true });
 const shots = [];
+// posições de trechos dentro de cada captura, em px da captura (3x): para destacar o lugar exato
+const medidas = {};
 
 async function capturar({ width, height, suffix, isMobile }) {
   const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: SCALE, isMobile, reducedMotion: 'reduce' });
@@ -32,7 +34,8 @@ async function capturar({ width, height, suffix, isMobile }) {
               html, body, main, section, .wrap, .hero-inner, .hero-texto, .section-head, .vs-quadro, .faq-list { background: transparent !important; }`,
   });
 
-  async function shot(name, locator, note) {
+  /** Captura a peça; `partes` = { rótulo: texto } mede onde cada texto está dentro dela. */
+  async function shot(name, locator, note, partes = {}) {
     if (!(await locator.count()) || !(await locator.first().isVisible())) {
       shots.push({ name: name + suffix, note: `${note} (não aparece nesta largura)` });
       return;
@@ -42,6 +45,17 @@ async function capturar({ width, height, suffix, isMobile }) {
     await el.screenshot({ path: `${OUT}/${name}${suffix}.png`, omitBackground: true, animations: 'disabled' });
     const box = await el.boundingBox();
     shots.push({ name: name + suffix, note, px: `${Math.round(box.width * SCALE)}x${Math.round(box.height * SCALE)}` });
+    for (const [rotulo, texto] of Object.entries(partes)) {
+      const r = await el.evaluate((root, txt) => {
+        // menor elemento dentro da peça cujo texto contém o trecho
+        const cands = [...root.querySelectorAll('*')].filter((e) => e.innerText && e.innerText.includes(txt));
+        const alvo = cands.sort((a, z) => a.innerText.length - z.innerText.length)[0];
+        if (!alvo) return null;
+        const a = root.getBoundingClientRect(), z = alvo.getBoundingClientRect();
+        return [z.left - a.left, z.top - a.top, z.right - a.left, z.bottom - a.top];
+      }, texto);
+      (medidas[name + suffix] ??= {})[rotulo] = r && r.map((v) => Math.round(v * SCALE));
+    }
   }
 
   const hero = page.locator('section.hero');
@@ -56,7 +70,12 @@ async function capturar({ width, height, suffix, isMobile }) {
 
   const vs = page.locator('#problemas');
   await shot('vs-hoje', vs.locator('.vs-hoje'), 'cartão "HOJE: Entrega na sua casa"');
-  await shot('vs-lokal', vs.locator('.vs-lokal'), 'cartão "COM A LOKAL: Entrega na agência parceira"');
+  await shot('vs-lokal', vs.locator('.vs-lokal'), 'cartão "COM A LOKAL: Entrega na agência parceira"', {
+    aviso: 'Aviso no WhatsApp quando chega', prazo: '7 dias úteis pra buscar com calma', qr: 'Retirada protegida por QR Code',
+  });
+
+  // preço: o cartão real com "R$ 5,90" e as três faixas de tamanho
+  await shot('preco', page.locator('#precos .faixa-grupo').first(), 'cartão de preço "R$ 5,90 · Pacote pequeno, médio ou grande"', { preco: 'R$ 5,90' });
 
   // "Tudo pelo app": as três telas reais, cada uma na moldura do site (iguais nas duas larguras)
   if (!suffix) {
@@ -79,4 +98,6 @@ async function capturar({ width, height, suffix, isMobile }) {
 await capturar({ width: 1440, height: 900, suffix: '', isMobile: false });
 await capturar({ width: 390, height: 844, suffix: '-m', isMobile: true });
 await browser.close();
+await writeFile(`${OUT}/medidas.json`, JSON.stringify(medidas, null, 2));
 console.table(shots);
+console.log('medidas (px da captura):', JSON.stringify(medidas));

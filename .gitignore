@@ -1,2 +1,4 @@
 node_modules/
 .render-tmp/
+# material de referência de terceiros (vídeo baixado e quadros extraídos): só para estudo local
+refs/

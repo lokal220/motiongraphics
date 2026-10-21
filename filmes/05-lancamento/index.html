@@ -1,0 +1,488 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<title>05 - lançamento da VAI DE LOKAL</title>
+<!--
+  Lançamento de 15 s, 16:9, na gramática de docs/guia-de-estilo.md, seguindo docs/lista-de-planos.md (aprovada).
+  96 BPM: batida 0,625 s, colcheia 0,3125 s, 24 batidas (6 compassos de 2,5 s).
+    P1 0-4,69   ato 1 em cinema (faixas de tinta, ilustração de traço, dolly-in, legenda palavra por palavra)
+    P2 4,69-5   empurrão para dentro da etiqueta; as faixas recolhem
+    P3 5-7,5    estúdio branco: tela real da encomenda + legenda em pílula
+    P4 7,5-10   o destaque pula entre peças reais (cartão COM A LOKAL, tela de retirada, cartão de preço)
+    P5 10-11,25 pausa em tinta: "Chega de perder encomendas."
+    P6 11,25-15 assinatura: logo real + frase + lista rolando + endereço
+  Texto entra por foco com subida curta na máscara (aprovado). Interface: só capturas reais.
+  Render: node render.mjs filmes/05-lancamento/index.html
+-->
+<style>
+  @font-face { font-family: 'DM Sans'; src: url('../../assets/fonts/DMSans-variavel-latin.woff2') format('woff2'); font-weight: 100 1000; }
+  html, body { margin: 0; background: #FFFFFF; }
+  canvas { display: block; }
+</style>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script>
+'use strict';
+
+// ---------------------------------------------------------------- tempo
+const W = 1920, H = 1080, FPS = 30, DUR = 15;
+const BPM = 96, BEAT = 60 / BPM, E8 = BEAT / 2, S16 = BEAT / 4, BAR = 4 * BEAT;
+const b = (n) => n * BEAT;          // batida n (contando do zero) em segundos
+const e8 = (n) => n * E8;           // colcheia n em segundos
+window.FILM = { width: W, height: H, fps: FPS, duration: DUR };
+
+// ---------------------------------------------------------------- marca (briefing)
+const OR = '#EA6E1A', OR_D = '#C05810', OR_P = '#FFF0E8', INK = '#2A1F18', INK2 = '#6B5C4E', WHITE = '#FFFFFF';
+const SANS = '"DM Sans"';
+const PIN = new Path2D('M50 22c-10 0-18 8-18 18 0 13 18 38 18 38s18-25 18-38c0-10-8-18-18-18zm0 25a7 7 0 1 1 0-14 7 7 0 0 1 0 14z');
+const LOGO_O = { x: 87.5, y: 93, r: 17 };   // furo do "O" no logo-lokal.png (320x154)
+
+// trechos medidos nas capturas (px da captura 3x; medidas.json + análise de pixels)
+const SPOT = {
+  chegou: [58, 292, 724, 392],                 // "Chegou na agência" na tela da encomenda
+  aviso: [72, 387, 987, 445], prazo: [72, 472, 987, 531],   // linhas do cartão COM A LOKAL
+  qr: [163, 383, 615, 835],                    // QR na tela de retirada
+  preco: [57, 57, 469, 183],                   // "R$ 5,90" no cartão de preço
+};
+
+// ---------------------------------------------------------------- utilidades puras
+const clamp = (x, a = 0, z = 1) => Math.min(z, Math.max(a, x));
+const prog = (t, a, z) => clamp((t - a) / (z - a));
+const lerp = (a, z, k) => a + (z - a) * k;
+const inCubic = (k) => k ** 3;
+const inOutCubic = (k) => (k < 0.5 ? 4 * k ** 3 : 1 - (-2 * k + 2) ** 3 / 2);
+function cubicBezier(x1, y1, x2, y2) {
+  const bz = (p, q, t) => 3 * p * (1 - t) ** 2 * t + 3 * q * (1 - t) * t * t + t ** 3;
+  return (x) => {
+    if (x <= 0) return 0;
+    if (x >= 1) return 1;
+    let lo = 0, hi = 1, t = x;
+    for (let i = 0; i < 24; i++) { t = (lo + hi) / 2; bz(x1, x2, t) < x ? (lo = t) : (hi = t); }
+    return bz(y1, y2, t);
+  };
+}
+const easeOut = cubicBezier(0.22, 1, 0.36, 1);      // --ease-out do site
+const spring = cubicBezier(0.34, 1.4, 0.64, 1);     // --ease-spring do site
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// ---------------------------------------------------------------- arquivos
+const ctx = document.getElementById('c').getContext('2d');
+const IMG = {};
+const FILES = {
+  logo: '../../assets/logo-lokal.png', encomenda: '../../assets/capturas/app-encomenda.png',
+  retirada: '../../assets/capturas/app-retirada.png', lokal: '../../assets/capturas/vs-lokal.png', preco: '../../assets/capturas/preco.png',
+};
+const assetsReady = Promise.all(Object.entries(FILES).map(([k, src]) => new Promise((res, rej) => {
+  const im = new Image();
+  im.onload = () => res();
+  im.onerror = () => rej(new Error(`não carregou ${src}`));
+  im.src = src;
+  IMG[k] = im;
+})).concat([400, 500, 700, 800].map((w) => document.fonts.load(`${w} 80px ${SANS}`))));
+
+// ---------------------------------------------------------------- desenho básico
+function font(weight, size) { ctx.font = `${weight} ${size}px ${SANS}`; }
+function bg(c) { ctx.fillStyle = c; ctx.fillRect(0, 0, W, H); }
+function clipRect(x, y, w, h) { ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip(); }
+function shadow(blur, dy, a) { ctx.shadowColor = `rgba(42,31,24,${a})`; ctx.shadowBlur = blur; ctx.shadowOffsetY = dy; }
+const noShadow = () => shadow(0, 0, 0);
+const measure = (s, weight, size) => (font(weight, size), ctx.measureText(s).width);
+
+/**
+ * Palavra entrando por foco (aprovado): desfoque -> nítido, subida curta dentro de uma máscara,
+ * opacidade mínima de 40% e só em legenda. `out` (0..1) faz a saída: sobe e perde o foco.
+ */
+function focusText(s, x, y, size, weight, color, k, out = 0) {
+  if (k <= 0 || out >= 1) return;
+  const e = easeOut(k), o = easeOut(out);
+  font(weight, size);
+  const w = ctx.measureText(s).width;
+  ctx.save();
+  clipRect(x - 12, y - size * 1.0, w + 24, size * 1.32);
+  ctx.globalAlpha = (0.4 + 0.6 * e) * (1 - o);
+  const blur = (1 - e) * 9 + o * 9;
+  if (blur > 0.3) ctx.filter = `blur(${blur.toFixed(2)}px)`;
+  ctx.fillStyle = color; ctx.textAlign = 'left';
+  ctx.fillText(s, x, y + size * 0.42 * (1 - e) - size * 0.3 * o);
+  ctx.restore();
+}
+/** Frase palavra a palavra: words = [[texto, t0], ...]; alinhamento à esquerda (x) ou centrado (xc). */
+function sentence(words, u, { x = null, xc = null, y, size, weight = 400, color = WHITE, dur = 0.3, outAt = Infinity, outDur = 0.3, colorOf = null }) {
+  font(weight, size);
+  const sp = ctx.measureText(' ').width;
+  const widths = words.map(([s]) => ctx.measureText(s).width);
+  const total = widths.reduce((a, z) => a + z, 0) + sp * (words.length - 1);
+  let cx = xc !== null ? xc - total / 2 : x;
+  const out = prog(u, outAt, outAt + outDur);
+  words.forEach(([s, t0], i) => {
+    focusText(s, cx, y, size, weight, colorOf ? colorOf(s) : color, prog(u, t0, t0 + dur), out);
+    cx += widths[i] + sp;
+  });
+  return total;
+}
+function cap(key, x, y, w, shadowA = 0.1) {
+  const im = IMG[key], h = (w * im.height) / im.width;
+  if (shadowA) { ctx.save(); shadow(48, 16, shadowA); ctx.fillStyle = WHITE; ctx.beginPath(); ctx.roundRect(x + 8, y + 8, w - 16, h - 16, 40); ctx.fill(); ctx.restore(); }
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(im, x, y, w, h);
+  return h;
+}
+const mapRect = (key, r, x, y, w) => { const s = w / IMG[key].width; return [x + r[0] * s, y + r[1] * s, x + r[2] * s, y + r[3] * s]; };
+function pin(x, tipY, h, color = OR, sx = 1, sy = 1) {
+  const k = h / 56;
+  ctx.save(); ctx.translate(x, tipY); ctx.scale(k * sx, k * sy); ctx.translate(-50, -78);
+  ctx.fillStyle = color; ctx.fill(PIN, 'evenodd'); ctx.restore();
+}
+function speedLines(x, y, len, s, k) {
+  if (k <= 0) return;
+  ctx.lineCap = 'round'; ctx.strokeStyle = OR; ctx.lineWidth = s * 0.45;
+  [[-1, 0.7], [0, 1], [1, 0.55]].forEach(([o, f]) => {
+    ctx.beginPath(); ctx.moveTo(x + o * s, y - s * 0.6); ctx.lineTo(x + o * s, y - s * 0.6 - len * f * k); ctx.stroke();
+  });
+}
+/** Anel de destaque: traço laranja arredondado, sem brilho. */
+function ring(r, k, pad = 14) {
+  if (k <= 0) return;
+  const s = lerp(1.08, 1, easeOut(k));
+  const cx = (r[0] + r[2]) / 2, cy = (r[1] + r[3]) / 2, w = (r[2] - r[0] + pad * 2) * s, h = (r[3] - r[1] + pad * 2) * s;
+  ctx.save(); ctx.globalAlpha = clamp(k * 3);
+  ctx.beginPath(); ctx.roundRect(cx - w / 2, cy - h / 2, w, h, Math.min(22, h / 2));
+  ctx.lineWidth = 6; ctx.strokeStyle = OR; ctx.stroke(); ctx.restore();
+}
+
+// ---------------------------------------------------------------- P1 + P2 · ato 1 em cinema e o empurrão
+const BARS = 128;   // faixas de tinta (≈ 2,3:1 dentro do 16:9)
+const FOCUS = { x: 868, y: 712 };   // centro da etiqueta da caixa: para onde a câmera avança
+function lineArt(lw) { ctx.lineWidth = lw; ctx.strokeStyle = INK; ctx.lineCap = ctx.lineJoin = 'round'; }
+function drawDoorLayer() {
+  // parede, rodapé, porta, campainha (camada de fundo)
+  lineArt(6);
+  ctx.beginPath(); ctx.moveTo(140, 800); ctx.lineTo(1520, 800); ctx.stroke();
+  ctx.beginPath(); ctx.roundRect(980, 330, 260, 470, [18, 18, 0, 0]); ctx.stroke();
+  ctx.beginPath(); ctx.roundRect(1010, 360, 200, 190, 10); ctx.stroke();
+  ctx.beginPath(); ctx.arc(1210, 585, 9, 0, Math.PI * 2); ctx.fillStyle = INK; ctx.fill();
+  ctx.beginPath(); ctx.roundRect(1270, 520, 26, 40, 8); ctx.stroke();
+  ctx.beginPath(); ctx.arc(1283, 534, 5, 0, Math.PI * 2); ctx.fillStyle = OR; ctx.fill();
+}
+function drawPackageLayer(showLines) {
+  // capacho e caixa com etiqueta (camada da frente)
+  lineArt(6);
+  ctx.beginPath(); ctx.roundRect(730, 790, 380, 26, 13); ctx.fillStyle = OR_P; ctx.fill(); ctx.stroke();
+  ctx.save(); ctx.fillStyle = 'rgba(42,31,24,0.08)'; ctx.beginPath(); ctx.ellipse(880, 800, 170, 14, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  ctx.beginPath(); ctx.roundRect(750, 600, 260, 196, 14); ctx.fillStyle = WHITE; ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(750, 650); ctx.lineTo(1010, 650); ctx.stroke();
+  ctx.strokeStyle = OR; ctx.beginPath(); ctx.moveTo(880, 600); ctx.lineTo(880, 650); ctx.stroke();
+  // etiqueta: branca, com linhas abstratas (nada de texto inventado)
+  lineArt(4);
+  ctx.beginPath(); ctx.roundRect(812, 676, 112, 72, 8); ctx.fillStyle = WHITE; ctx.fill(); ctx.stroke();
+  if (!showLines) return;
+  ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(42,31,24,0.45)';
+  for (const [y, w] of [[694, 70], [710, 84], [726, 52]]) { ctx.beginPath(); ctx.moveTo(826, y); ctx.lineTo(826 + w, y); ctx.stroke(); }
+}
+/** Primeiro plano desfocado (vaso com folhas, em traço): passa mais rápido que o resto, como a profundidade de campo da referência. */
+function drawForeground() {
+  ctx.save();
+  ctx.filter = 'blur(16px)';
+  lineArt(12); ctx.strokeStyle = INK2;
+  // vaso: boca larga em cima, fundo mais estreito, fechado
+  ctx.beginPath(); ctx.moveTo(236, 846); ctx.lineTo(498, 846); ctx.lineTo(462, 1040); ctx.lineTo(272, 1040); ctx.closePath(); ctx.stroke();
+  for (const [x1, y1, cx, cy] of [[300, 600, 330, 720], [380, 560, 370, 700], [460, 620, 420, 730], [240, 680, 300, 760]]) {
+    ctx.beginPath(); ctx.moveTo(367, 842); ctx.quadraticCurveTo(cx, cy, x1, y1); ctx.stroke();
+  }
+  ctx.restore();
+}
+function drawBellRings(u) {
+  for (const t0 of [0, BEAT]) {
+    const k = prog(u, t0, t0 + 0.4);
+    if (k <= 0 || k >= 1) continue;
+    ctx.save(); ctx.globalAlpha = 1 - k; lineArt(5); ctx.strokeStyle = OR;
+    for (let i = 0; i < 2; i++) {
+      const r = 30 + i * 18 + 26 * easeOut(k);
+      ctx.beginPath(); ctx.arc(1283, 540, r, -0.6, 0.6); ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+const S1 = [['Sua', e8(0)], ['compra', e8(1)], ['chegou.', e8(2)], ['Você', e8(3)], ['não', e8(4)], ['estava.', e8(5)]];
+const S2 = [['E agora', e8(8)], ['é torcer', e8(9)], ['pelo vizinho,', e8(10)], ['pelo porteiro', e8(11)], ['ou pela', e8(12)], ['terceira', e8(13)], ['tentativa.', e8(14)]];
+function act1(u) {
+  bg(OR_P);
+  // dolly-in lento até 4,69 s; depois (P2) acelera para dentro da etiqueta
+  const slow = lerp(1.14, 1.42, inOutCubic(prog(u, 0, e8(15))));   // já começa perto: o quadro 0 tem corpo
+  const fast = inCubic(prog(u, e8(15), b(8)));
+  const s = slow * Math.exp(Math.log(14) * fast);
+  // a câmera avança em direção à etiqueta: o centro do quadro desliza até ela enquanto a escala cresce
+  const kc = inOutCubic(prog(u, 0, b(8)));
+  const layer = (depth, draw) => {
+    const sp = 1 + (s - 1) * depth, cx = lerp(W / 2, FOCUS.x, kc * depth), cy = lerp(H / 2, FOCUS.y, kc * depth);
+    ctx.save(); ctx.translate(W / 2, H / 2); ctx.scale(sp, sp); ctx.translate(-cx, -cy); draw(); ctx.restore();
+  };
+  layer(0.82, () => { drawDoorLayer(); drawBellRings(u); });   // paralaxe: o fundo anda menos
+  layer(1, () => drawPackageLayer(s < 5));
+  layer(1.35, drawForeground);                                   // e o primeiro plano anda mais
+  // no fim do empurrão, o branco da etiqueta toma o quadro
+  const white = prog(u, b(8) - 0.08, b(8));
+  if (white > 0) { ctx.save(); ctx.globalAlpha = white; bg(WHITE); ctx.restore(); }
+  // faixas de tinta: recolhem durante o empurrão
+  const kb = inOutCubic(prog(u, e8(15), b(8)));
+  ctx.fillStyle = INK;
+  ctx.fillRect(0, -BARS * kb, W, BARS);
+  ctx.fillRect(0, H - BARS + BARS * kb, W, BARS);
+  // legenda na faixa de baixo, presa a ela
+  ctx.save(); ctx.translate(0, BARS * kb);
+  sentence(S1, u, { xc: W / 2, y: H - BARS / 2 + 15, size: 42, outAt: e8(7), outDur: 0.28 });
+  sentence(S2, u, { xc: W / 2, y: H - BARS / 2 + 15, size: 42 });
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------- P3 + P4 · estúdio: a faixa de peças reais
+// mundo horizontal: [tela da encomenda | cartão COM A LOKAL | tela da retirada | cartão de preço]
+const PHONE_H = 800, phoneW = () => (PHONE_H * IMG.encomenda.width) / IMG.encomenda.height;
+const WORLD = () => ({
+  encomenda: [-phoneW() / 2, 56, phoneW()],
+  lokal: [1000, 205, 780],     // fora do quadro durante P3: só entra quando a câmera vai até ele
+  retirada: [2000, 56, phoneW()],
+  preco: [2700, 242, 820],
+});
+function worldRect(key, spotKey) { const [x, y, w] = WORLD()[key]; return mapRect(key, SPOT[spotKey], x, y, w); }
+const center = (r) => [(r[0] + r[2]) / 2, (r[1] + r[3]) / 2];
+const STOPS = () => [   // [tempo, centro x da câmera no mundo, alvo do anel]
+  [b(8), 0, null],
+  [b(10), 0, worldRect('encomenda', 'chegou')],
+  [b(12), center(worldRect('lokal', 'aviso'))[0], worldRect('lokal', 'aviso')],
+  [b(13), center(worldRect('lokal', 'prazo'))[0], worldRect('lokal', 'prazo')],
+  [b(14), center(worldRect('retirada', 'qr'))[0], worldRect('retirada', 'qr')],
+  [b(15), center(worldRect('preco', 'preco'))[0] + 200, worldRect('preco', 'preco')],
+];
+const PILLS = [
+  [b(8), [['Compre', e8(16)], ['onde', e8(17)], ['quiser.', e8(18)], ['A', e8(19)], ['gente', e8(20)], ['recebe', e8(21)], ['pra', e8(22)], ['você.', e8(23)]]],
+  [b(12), 'Aviso no WhatsApp quando chega'], [b(13), '7 dias úteis pra buscar com calma'],
+  [b(14), 'Retirada protegida por QR Code'], [b(15), 'R$ 5,90 na maioria dos pacotes'],
+];
+/** Câmera e anel: os dois chegam ao alvo exatamente na batida (a câmera sai 0,32 s antes, o anel pula 0,2 s antes). */
+function follow(u, stops) {
+  let camX = stops[0][1], ring = null;
+  for (let i = 1; i < stops.length; i++) {
+    const [, x0, r0] = stops[i - 1], [t1, x1, r1] = stops[i];
+    if (u < t1 - 0.32) break;
+    camX = u >= t1 ? x1 : lerp(x0, x1, easeOut(prog(u, t1 - 0.32, t1)));
+    if (r1 && u >= t1 - 0.2) {
+      const kj = easeOut(prog(u, t1 - 0.2, t1));
+      ring = r0 ? { r: r1.map((v, j) => lerp(r0[j], v, kj)), k: 1 } : { r: r1, k: prog(u, t1 - 0.2, t1 + 0.1) };
+    } else if (r0) ring = { r: r0, k: 1 };
+  }
+  return { camX, ring };
+}
+function studio(u) {
+  bg(WHITE);
+  const { camX, ring: rg } = follow(u, STOPS());
+  const breath = u < b(12) ? lerp(1, 1.06, inOutCubic(prog(u, b(8), b(12)))) : 1.04 + 0.02 * Math.cos(Math.PI * prog((u - b(12)) % BEAT, 0, BEAT));
+  const rise = spring(prog(u, b(8) - 0.02, b(8) + 0.45));
+  ctx.save();
+  ctx.translate(W / 2, H / 2 - 30); ctx.scale(breath, breath); ctx.translate(-camX, -H / 2 + 30);
+  const Wd = WORLD();
+  const enc = Wd.encomenda;
+  cap('encomenda', enc[0], enc[1] + (1 - rise) * H * 0.9, enc[2]);
+  cap('lokal', ...Wd.lokal, 0.08);
+  cap('retirada', ...Wd.retirada);
+  cap('preco', ...Wd.preco, 0.08);
+  if (rg) ring(rg.r, rg.k);
+  ctx.restore();
+  pill(u);
+  // nota real do site, fixa e centrada sob a pílula (nunca cortada pela câmera)
+  const note = 'Telas do aplicativo com dados de exemplo.';
+  focusText(note, W / 2 - measure(note, 500, 24) / 2, H - 30, 24, 500, INK2, prog(u, b(9), b(9) + 0.4));
+}
+
+/** Legenda em pílula de tinta, texto branco alinhado à esquerda (DM Sans 500). */
+function pill(u) {
+  let idx = 0;
+  for (let i = 0; i < PILLS.length; i++) if (u >= PILLS[i][0]) idx = i;
+  const [t0, content] = PILLS[idx];
+  const words = Array.isArray(content) ? content : content.split(' ').map((s, i) => [s, t0 + i * 0.045]);
+  const size = 40, padX = 34, h = 84, y = H - 92 - h;
+  const wFull = measure(words.map((w) => w[0]).join(' '), 500, size) + padX * 2;
+  const prev = idx > 0 ? PILLS[idx - 1] : null;
+  const wPrev = prev ? measure((Array.isArray(prev[1]) ? prev[1].map((w) => w[0]).join(' ') : prev[1]), 500, size) + padX * 2 : wFull;
+  const kw = easeOut(prog(u, t0, t0 + 0.18)), pw = lerp(wPrev, wFull, kw);
+  const kIn = spring(prog(u, b(8) - 0.02, b(8) + 0.3));
+  const x = W / 2 - pw / 2;
+  ctx.save();
+  ctx.translate(W / 2, y + h / 2); ctx.scale(lerp(0.9, 1, kIn), lerp(0.9, 1, kIn)); ctx.translate(-W / 2, -(y + h / 2));
+  ctx.beginPath(); ctx.roundRect(x, y, pw, h, 22); ctx.fillStyle = 'rgba(42,31,24,0.94)'; ctx.fill();
+  ctx.beginPath(); ctx.roundRect(x, y, pw, h, 22); ctx.clip();
+  const colorOf = (s) => (s === 'R$' || s === '5,90' ? OR : WHITE);
+  // "fantasma" do guia: a frase anterior sai por foco enquanto a nova entra
+  if (prev && u < t0 + 0.24) {
+    const pw0 = Array.isArray(prev[1]) ? prev[1] : prev[1].split(' ').map((s) => [s, -1]);
+    sentence(pw0.map(([s]) => [s, -1]), u, { x: x + padX, y: y + h / 2 + 14, size, weight: 500, outAt: t0 - 0.04, outDur: 0.24, colorOf });
+  }
+  sentence(words, u, { x: x + padX, y: y + h / 2 + 14, size, weight: 500, color: WHITE, dur: 0.24, colorOf });
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------- P5 · pausa em tinta
+const S5 = [['Chega', e8(32)], ['de', e8(33)], ['perder', e8(34)], ['encomendas.', e8(35)]];
+function pause(u) {
+  bg(INK);
+  sentence(S5, u, { xc: W / 2, y: H / 2 + 34, size: 96, weight: 800, color: WHITE, dur: 0.32 });
+  if (u > b(18) - E8) pinDrop(u - b(18));
+}
+
+// ---------------------------------------------------------------- P6 · assinatura
+const LOGO = { w: 640, cx: 560, cy: 420 };
+function logoGeom() {
+  const lw = LOGO.w, lh = (lw * 154) / 320, sc = lw / 320;
+  const lx = LOGO.cx - lw / 2, ly = LOGO.cy - lh / 2, pinH = LOGO_O.r * sc * 3.3;
+  const ox = lx + LOGO_O.x * sc, oy = ly + LOGO_O.y * sc;
+  return { lw, lh, lx, ly, ox, oy, pinH, tip: oy + (78 - 40) * (pinH / 56) };
+}
+/** O pin cai de -1 colcheia a +1 colcheia (tau relativo ao início da assinatura) e encaixa no "O". */
+function pinDrop(tau) {
+  const g = logoGeom(), kf = prog(tau, -E8, E8), kOut = prog(tau, E8, E8 + 0.16);
+  if (kOut >= 1) return;
+  const y = lerp(g.tip - 360, g.tip, kf * kf);
+  const sq = Math.max(0, 1 - Math.abs(tau - E8) / 0.08) * (tau >= E8 ? 1 : 0);
+  if (kf < 1) speedLines(g.ox, y - g.pinH * 0.75, 220, 12, 1);
+  pin(g.ox, y, g.pinH * (1 - kOut), OR, 1 + 0.3 * sq, 1 - 0.25 * sq);
+}
+const S6 = [['A', e8(40)], ['gente', e8(41)], ['recebe', e8(42)], ['e', e8(43)], ['te', e8(44)], ['avisa.', e8(45)], ['Você', e8(46)], ['retira.', e8(47)]].map(([s, t]) => [s, t - b(18)]);
+const LIST = ['Aviso no WhatsApp quando chega', '7 dias úteis pra buscar com calma', 'Retirada protegida por QR Code', 'R$ 5,90 na maioria dos pacotes'];
+function signature(u) {   // u é relativo ao início da assinatura (11,25 s)
+  bg(WHITE);
+  const { lw, lh, lx, ly, ox, oy } = logoGeom();
+  const tEnd = b(5);   // 14,375 s: a lista sai, o bloco volta ao centro e entra o endereço
+  const shift = 400 * inOutCubic(prog(u, tEnd - 0.05, tEnd + 0.4));
+  ctx.save(); ctx.translate(shift, 0);
+  const kR = easeOut(prog(u, E8, E8 + 0.5));
+  if (kR > 0) {
+    ctx.save(); ctx.beginPath(); ctx.arc(ox, oy, 2 * lw * kR, 0, Math.PI * 2); ctx.clip();
+    ctx.imageSmoothingQuality = 'high'; ctx.drawImage(IMG.logo, lx, ly + 16 * (1 - kR), lw, lh); ctx.restore();
+  }
+  pinDrop(u);
+  sentence(S6, u, { x: lx + 8, y: ly + lh + 92, size: 44, weight: 500, color: INK2 });
+  // endereço entra quando a lista sai
+  focusText('vaidelokal.com.br', lx + 8, ly + lh + 170, 44, 700, OR_D, prog(u, tEnd, tEnd + 0.32));
+  ctx.restore();
+  // lista rolando de baixo para cima, com as bordas esmaecendo; sai para cima na batida 24
+  const top = 250, bottom = 830, x0 = 1120, gap = 128;
+  const roll = (k) => lerp(bottom + 60, top + 120, easeOut(k));
+  const out = inOutCubic(prog(u, tEnd - 0.05, tEnd + 0.4));
+  ctx.save(); clipRect(x0 - 40, top, W - x0, bottom - top);
+  LIST.forEach((s, i) => {
+    const t0 = b(2) + i * E8, k = prog(u, t0, t0 + 0.5);
+    if (k <= 0) return;
+    const y = roll(k) + i * gap - (bottom - top) * out;
+    font(700, 42);
+    if (s.startsWith('R$ 5,90')) {
+      ctx.fillStyle = OR; ctx.fillText('R$ 5,90', x0, y);
+      const w = ctx.measureText('R$ 5,90 ').width; ctx.fillStyle = INK; ctx.fillText(s.slice(8), x0 + w, y);
+    } else { ctx.fillStyle = INK; ctx.fillText(s, x0, y); }
+  });
+  // máscaras das bordas (branco do fundo, como na referência)
+  for (const [y, dir] of [[top, 1], [bottom, -1]]) {
+    const g = ctx.createLinearGradient(0, y, 0, y + dir * 110);
+    g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g; ctx.fillRect(x0 - 40, dir > 0 ? y : y - 110, W - x0, 110);
+  }
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------- montagem
+function draw(t) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.filter = 'none'; noShadow();
+  if (t < b(8)) return act1(t);
+  if (t < b(16)) return studio(t);
+  if (t < b(18)) return pause(t);
+  return signature(t - b(18));
+}
+window.seek = async (t) => { await assetsReady; draw(t); };
+
+// ---------------------------------------------------------------- trilha (sintetizada, 96 BPM, dó maior)
+const NOTE_HZ = (n) => 440 * 2 ** ((n - 69) / 12);
+window.renderAudio = async (sr) => {
+  const ac = new OfflineAudioContext(2, Math.ceil(DUR * sr), sr);
+  const rnd = mulberry32(0x5);
+  const noise = ac.createBuffer(1, sr * 3, sr);
+  { const d = noise.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = rnd() * 2 - 1; }
+  const comp = new DynamicsCompressorNode(ac, { threshold: -18, knee: 8, ratio: 3, attack: 0.004, release: 0.15 });
+  comp.connect(ac.destination);
+  const bus = new GainNode(ac, { gain: 0.6 }); bus.connect(comp);
+  const echo = new DelayNode(ac, { delayTime: E8 * 1.5, maxDelayTime: 1.5 });
+  const fb = new GainNode(ac, { gain: 0.28 }), wet = new GainNode(ac, { gain: 0.26 });
+  echo.connect(fb).connect(echo); echo.connect(wet).connect(bus);
+  const send = (node, pan = 0, fx = 0) => {
+    const p = new StereoPannerNode(ac, { pan }); node.connect(p).connect(bus);
+    if (fx) p.connect(new GainNode(ac, { gain: fx })).connect(echo);
+  };
+  const env = (t, a, d, v) => {
+    const g = new GainNode(ac, { gain: 0 });
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v, t + a); g.gain.exponentialRampToValueAtTime(1e-4, t + a + d);
+    return g;
+  };
+  const noiseAt = (t, d) => { const s = new AudioBufferSourceNode(ac, { buffer: noise }); s.start(t, (t * 0.37) % 2); s.stop(t + d); return s; };
+  const osc = (type, f, t, d) => { const o = new OscillatorNode(ac, { type, frequency: f }); o.start(t); o.stop(t + d); return o; };
+  const filt = (type, frequency, q = 1) => new BiquadFilterNode(ac, { type, frequency, Q: q });
+
+  const kick = (t, v = 0.7) => { const o = osc('sine', 140, t, 0.45); o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.12); const g = env(t, 0.003, 0.38, v); o.connect(g); send(g); };
+  const shaker = (t, v = 0.03) => { const g = env(t, 0.006, 0.05, v); noiseAt(t, 0.08).connect(filt('highpass', 7000)).connect(g); send(g, 0.25); };
+  const tick = (t, v = 0.06) => { const g = env(t, 0.001, 0.02, v); noiseAt(t, 0.03).connect(filt('bandpass', 3000, 3)).connect(g); send(g, -0.2); };
+  const bass = (t, n, d = 0.5, v = 0.24) => { const o = osc('triangle', NOTE_HZ(n), t, d + 0.05), s = osc('sine', NOTE_HZ(n), t, d + 0.05); const g = env(t, 0.006, d, v); o.connect(filt('lowpass', 500)).connect(g); s.connect(g); send(g); };
+  const bell = (t, n, v = 0.1, d = 1.2, pan = 0, ratio = 2) => {
+    const f = NOTE_HZ(n), car = osc('sine', f, t, d + 0.1), mod = osc('sine', f * ratio, t, d + 0.1);
+    const mg = new GainNode(ac, { gain: 0 }); mg.gain.setValueAtTime(f * 1.4, t); mg.gain.exponentialRampToValueAtTime(f * 0.04, t + 0.4);
+    mod.connect(mg).connect(car.frequency); const g = env(t, 0.003, d, v); car.connect(g); send(g, pan, 0.3);
+  };
+  const marimba = (t, n, v = 0.09, pan = 0) => { const f = NOTE_HZ(n), a = osc('sine', f, t, 0.6), c = osc('sine', f * 4, t, 0.15); const g = env(t, 0.002, 0.45, v), g2 = env(t, 0.001, 0.06, v * 0.35); a.connect(g); c.connect(g2); send(g, pan, 0.25); send(g2, pan); };
+  const click = (t, v = 0.16, pan = 0) => { const g = env(t, 0.0005, 0.012, v); noiseAt(t, 0.02).connect(filt('bandpass', 3800, 3)).connect(g); send(g, pan); const o = osc('sine', 2400, t, 0.03), g2 = env(t, 0.0005, 0.018, v * 0.5); o.connect(g2); send(g2, pan); };
+  const whoosh = (t0, t1, v = 0.1, f0 = 300, f1 = 5000) => {   // termina NA batida
+    const bp = filt('bandpass', f0, 1.3); bp.frequency.setValueAtTime(f0, t0); bp.frequency.exponentialRampToValueAtTime(f1, t1);
+    const g = new GainNode(ac, { gain: 0 }); g.gain.setValueAtTime(1e-4, t0); g.gain.exponentialRampToValueAtTime(v, t1 - 0.02); g.gain.exponentialRampToValueAtTime(1e-4, t1 + 0.08);
+    noiseAt(t0, t1 - t0 + 0.1).connect(bp).connect(g); send(g);
+  };
+  const pad = (t0, t1, notes, v = 0.035, cut = 900) => {
+    const lp = filt('lowpass', cut, 0.7), g = new GainNode(ac, { gain: 0 });
+    g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(v, t0 + 0.4); g.gain.setValueAtTime(v, t1 - 0.1); g.gain.linearRampToValueAtTime(0, t1);
+    lp.connect(g); send(g, 0, 0.2);
+    for (const n of notes) for (const det of [-6, 6]) { const o = osc('sawtooth', NOTE_HZ(n), t0, t1 - t0); o.detune.value = det; o.connect(lp); }
+  };
+  const sub = (t, v = 0.3, d = 1.2) => { const o = osc('sine', 55, t, d + 0.05); o.frequency.exponentialRampToValueAtTime(38, t + d); const g = env(t, 0.01, d, v); o.connect(g); send(g); };
+  const fall = (t0, t1, v = 0.045) => { const o = osc('sine', 1700, t0, t1 - t0); o.frequency.exponentialRampToValueAtTime(480, t1); const g = new GainNode(ac, { gain: 0 }); g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(v, t0 + 0.05); g.gain.setValueAtTime(v, t1 - 0.02); g.gain.linearRampToValueAtTime(0, t1); o.connect(g); send(g, 0, 0.15); };
+  const pop = (t, f0 = 1100, f1 = 300, v = 0.18) => { const o = osc('sine', f0, t, 0.15); o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + 0.07); const g = env(t, 0.002, 0.11, v); o.connect(g); send(g, 0, 0.1); };
+
+  // P1: campainha (mi, dó), silêncio em "Você não estava.", relógio na frase 2
+  pad(0, b(8), [57, 64, 69], 0.03, 700);
+  bell(0, 76, 0.14); bell(BEAT, 72, 0.14);
+  sub(e8(3), 0.16, 0.8);
+  for (let n = 8; n < 15; n++) tick(e8(n), n % 2 ? 0.05 : 0.07);
+  // P2: empurrão para dentro da etiqueta
+  whoosh(e8(14), b(8), 0.12, 200, 6000); sub(b(8), 0.22, 0.9);
+  // P3-P4: pulso calmo
+  const roots = [48, 48, 45, 45, 41, 41, 43, 43];   // dó dó lá lá fá fá sol sol (por batida, de 9 a 16)
+  for (let i = 0; i < 8; i++) {
+    const t = b(8 + i);
+    kick(t, i === 0 ? 0.8 : 0.6); bass(t, roots[i] - 12, BEAT * 0.9, 0.22);
+    for (let s = 0; s < 4; s++) shaker(t + s * S16, s % 2 ? 0.035 : 0.02);
+  }
+  marimba(b(8), 72, 0.08); marimba(b(8) + E8, 76, 0.07); marimba(b(9), 79, 0.07);
+  click(b(10), 0.16); marimba(b(10), 84, 0.08);                 // anel em "Chegou na agência"
+  [79, 81, 84, 88].forEach((n, i) => { const t = b(12 + i); whoosh(t - 0.22, t, 0.05, 1500, 7000); click(t, 0.2, -0.2 + i * 0.15); marimba(t, n, 0.09); });
+  // P5: a música some; só um grave e o assobio do pin
+  sub(b(16), 0.34, 1.2); bell(b(16), 60, 0.05, 1.4);
+  fall(b(18) - E8, b(18) + E8);
+  // P6: o pin encaixa; a campainha volta resolvida (sobe)
+  pop(b(18) + E8, 1200, 300, 0.2); bass(b(18) + E8, 36, 2.2, 0.26);
+  bell(b(18) + E8, 72, 0.12, 1.4, -0.1); bell(b(19), 79, 0.12, 1.4, 0.1);
+  pad(b(18) + E8, DUR, [60, 64, 67, 71], 0.03, 1400);
+  for (let i = 0; i < 4; i++) tick(b(20) + i * E8, 0.04);
+  marimba(b(23), 84, 0.08); marimba(b(23) + E8, 91, 0.06);
+  return ac.startRendering();
+};
+</script>
+</html>

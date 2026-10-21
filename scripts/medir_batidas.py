@@ -74,6 +74,10 @@ def main():
     print(f"{len(grid)} batidas na grade, {len(beats)} detectadas, {len(onsets)} ataques")
     print(f"ataques fora da semicolcheia: mediana {np.median(dev_ms):.1f} ms, "
           f"pior {dev_ms.max():.1f} ms, acima de 25 ms: {(dev_ms > 25).sum()}")
+    sub32 = period / 8
+    dev32 = np.abs((onsets - t0 + sub32 / 2) % sub32 - sub32 / 2) * 1000
+    print(f"ataques fora da fusa (1/32): mediana {np.median(dev32):.1f} ms, "
+          f"pior {dev32.max():.1f} ms, acima de 15 ms: {(dev32 > 15).sum()}")
     print(f"gravado em {args.saida}")
 
 

@@ -1,0 +1,794 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<title>02 - showreel</title>
+<!--
+  Showreel de 15 s: 8 compassos a 128 BPM (1 compasso = 1,875 s), uma habilidade por compasso.
+  1 tipografia cinética · 2 easing · 3 física · 4 sistema · 5 dados · 6 interface · 7 ruído · 8 assinatura
+  Tudo é desenhado em seek(t) a partir do zero; trilha sintetizada, acertos em batidas/colcheias/semicolcheias.
+  Render: node render.mjs filmes/02-showreel/index.html
+-->
+<style>
+  @font-face { font-family: 'Titulo'; src: local('Bahnschrift'); font-weight: 300 700; font-stretch: 75% 100%; }
+  html, body { margin: 0; background: #141413; }
+  canvas { display: block; }
+</style>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script>
+'use strict';
+
+// ---------------------------------------------------------------- constantes
+const W = 1920, H = 1080, FPS = 60, DUR = 15;
+const BPM = 128, BEAT = 60 / BPM, BAR = 4 * BEAT, E8 = BEAT / 2, S16 = BEAT / 4;
+window.FILM = { width: W, height: H, fps: FPS, duration: DUR };
+
+// uma cor de destaque (argila) sobre creme e quase-preto
+const ACC = '#D97757', INK = '#141413', CREAM = '#F0EEE6', WHITE = '#FFFFFF', MID = '#B0AEA5', MUTED = '#6B6A65';
+const DIM = '#3A3A36', TRACK = '#E3E0D5';
+const TITLE = 'Titulo', MONO = 'Consolas';
+const TAU = Math.PI * 2;
+
+// ---------------------------------------------------------------- utilidades puras
+const clamp = (x, a = 0, z = 1) => Math.min(z, Math.max(a, x));
+const prog = (t, a, z) => clamp((t - a) / (z - a));
+const lerp = (a, z, k) => a + (z - a) * k;
+const outCubic = (k) => 1 - (1 - k) ** 3;
+const inCubic = (k) => k ** 3;
+const inOutCubic = (k) => (k < 0.5 ? 4 * k ** 3 : 1 - (-2 * k + 2) ** 3 / 2);
+const outExpo = (k) => (k >= 1 ? 1 : 1 - 2 ** (-10 * k));
+const outBack = (k, s = 1.70158) => 1 + (s + 1) * (k - 1) ** 3 + s * (k - 1) ** 2;
+const bump = (t, a, d) => Math.sin(Math.PI * prog(t, a, a + d));
+function outBounce(x) {
+  const n = 7.5625, d = 2.75;
+  if (x < 1 / d) return n * x * x;
+  if (x < 2 / d) return n * (x -= 1.5 / d) * x + 0.75;
+  if (x < 2.5 / d) return n * (x -= 2.25 / d) * x + 0.9375;
+  return n * (x -= 2.625 / d) * x + 0.984375;
+}
+function mixColor(a, z, k) {
+  const p = (c) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
+  const [r1, g1, b1] = p(a), [r2, g2, b2] = p(z);
+  return `rgb(${Math.round(lerp(r1, r2, k))},${Math.round(lerp(g1, g2, k))},${Math.round(lerp(b1, b2, k))})`;
+}
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// ruído de valor 3D com tabela embaralhada por mulberry32 (semente fixa)
+const NOISE = (() => {
+  const rnd = mulberry32(2026), perm = [...Array(256).keys()], val = new Float32Array(256);
+  for (let i = 255; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [perm[i], perm[j]] = [perm[j], perm[i]]; }
+  for (let i = 0; i < 256; i++) val[i] = rnd();
+  return { perm: perm.concat(perm), val };
+})();
+function noise3(x, y, z) {
+  const P = NOISE.perm, V = NOISE.val;
+  const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
+  const fx = x - xi, fy = y - yi, fz = z - zi;
+  const s = (f) => f * f * (3 - 2 * f), u = s(fx), v = s(fy), w = s(fz);
+  const h = (a, b, c) => V[P[P[P[(xi + a) & 255] + ((yi + b) & 255)] + ((zi + c) & 255)]];
+  return lerp(
+    lerp(lerp(h(0, 0, 0), h(1, 0, 0), u), lerp(h(0, 1, 0), h(1, 1, 0), u), v),
+    lerp(lerp(h(0, 0, 1), h(1, 0, 1), u), lerp(h(0, 1, 1), h(1, 1, 1), u), v), w);
+}
+
+// ---------------------------------------------------------------- desenho básico
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+const fontsReady = Promise.all([300, 500, 700].map((w) => document.fonts.load(`${w} 100px ${TITLE}`))
+  .concat([document.fonts.load(`400 40px ${MONO}`), document.fonts.load(`700 40px ${MONO}`)]));
+
+function font(weight, size, family = TITLE, stretch = 'condensed') {
+  ctx.font = `${Math.round(weight)} ${size}px ${family}`;
+  ctx.fontStretch = family === TITLE ? stretch : 'normal';
+}
+function text(s, x, y, color, align = 'left') {
+  ctx.fillStyle = color; ctx.textAlign = align; ctx.fillText(s, x, y);
+}
+function bg(color) { ctx.fillStyle = color; ctx.fillRect(0, 0, W, H); }
+function clipRect(x, y, w, h) { ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip(); }
+function shadow(blur, dy, alpha) { ctx.shadowColor = `rgba(20,20,19,${alpha})`; ctx.shadowBlur = blur; ctx.shadowOffsetY = dy; }
+const noShadow = () => shadow(0, 0, 0);
+function line(x0, y0, x1, y1, color, width) {
+  ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1);
+  ctx.strokeStyle = color; ctx.lineWidth = width; ctx.lineCap = 'round'; ctx.stroke();
+}
+function polyPartial(pts, k, color, width) {
+  if (k <= 0) return;
+  const lens = pts.slice(1).map((p, i) => Math.hypot(p[0] - pts[i][0], p[1] - pts[i][1]));
+  let left = k * lens.reduce((a, z) => a + z, 0);
+  ctx.beginPath(); ctx.moveTo(...pts[0]);
+  for (let i = 0; i < lens.length && left > 0; i++) {
+    const f = Math.min(1, left / lens[i]);
+    ctx.lineTo(lerp(pts[i][0], pts[i + 1][0], f), lerp(pts[i][1], pts[i + 1][1], f));
+    left -= lens[i];
+  }
+  ctx.strokeStyle = color; ctx.lineWidth = width; ctx.lineCap = ctx.lineJoin = 'round'; ctx.stroke();
+}
+const check = (x, y, s, color, width, k = 1) =>
+  polyPartial([[x - 9 * s, y], [x - 3 * s, y + 6 * s], [x + 9 * s, y - 7 * s]], k, color, width);
+
+/** Larguras de cada letra (no peso final), para animar letra por letra sem a palavra tremer. */
+function layout(str, size, weight = 700) {
+  font(weight, size);
+  let x = 0;
+  const slots = [...str].map((ch) => { const w = ctx.measureText(ch).width; const s = [x, w]; x += w; return s; });
+  return { slots, width: x };
+}
+/** Desenha letra por letra; fn(i, n) devolve { dx, dy, weight, sx, sy, rot, color } ou null. */
+function letters(str, x0, base, size, fn) {
+  const L = layout(str, size), chars = [...str];
+  chars.forEach((ch, i) => {
+    const s = fn(i, chars.length);
+    if (!s) return;
+    const [lx, lw] = L.slots[i];
+    font(s.weight ?? 700, size);
+    ctx.save();
+    ctx.translate(x0 + lx + lw / 2 + (s.dx || 0), base + (s.dy || 0));
+    if (s.rot) ctx.rotate(s.rot);
+    ctx.scale(s.sx ?? 1, s.sy ?? 1);
+    text(ch, 0, 0, s.color || CREAM, 'center');
+    ctx.restore();
+  });
+  return L.width;
+}
+
+// ---------------------------------------------------------------- 1 · gancho: tipografia cinética
+const S1 = { x0: 130, base: 770, size: 470 };
+function deTLayout() {
+  const de = layout('DE', S1.size, 300).width;
+  return { deW: de, tx: S1.x0 + de + 70, tSize: 660 };
+}
+function scene1(u) {
+  bg(INK);
+  const { x0, base, size } = S1;
+  // corte seco a cada batida: uma palavra por vez, nunca duas sobrepostas
+  const w = Math.min(3, Math.floor(u / BEAT)), v = u - w * BEAT;
+  ctx.save();
+  clipRect(0, base - size * 0.92, W, size * 1.22);
+  const draws = [
+    // CADA: letras sobem da máscara em cascata e ganham peso
+    (vv, out) => letters('CADA', x0, base - out * size, size, (i) => {
+      const k = outExpo(prog(vv, -0.14 + i * 0.035, 0.12 + i * 0.035));
+      return { dy: (1 - k) * size * 0.85, weight: lerp(300, 700, k) };
+    }),
+    // QUADRO: a palavra inteira estica a partir da esquerda (stretch)
+    (vv, out) => {
+      const k = prog(vv, 0, 0.24);
+      ctx.save();
+      ctx.translate(x0, base - out * size);
+      ctx.scale(lerp(0.18, 1, outBack(k, 1.4)), lerp(1.45, 1, outCubic(k)));
+      font(700, size); text('QUADRO', 0, 0, CREAM);
+      ctx.restore();
+      return layout('QUADRO', size).width;
+    },
+    // É UMA / FUNÇÃO: linha fina desliza, letras pesadas caem com quique
+    (vv, out) => {
+      const ka = outExpo(prog(vv, 0, 0.2));
+      font(300, 150); text('É UMA', x0 + lerp(-520, 0, ka), base - size * 0.95 + 80 - out * size, CREAM);
+      return letters('FUNÇÃO', x0, base - out * size, size, (i) => {
+        // outBack(·, 2) toca a linha de base em 1/3 da animação: a 1ª letra pousa na batida
+        const k = prog(vv, -0.066 + i * 0.028, 0.134 + i * 0.028);
+        return { dy: -(1 - outBack(k, 2)) * size * 1.1, rot: (1 - outCubic(k)) * (i % 2 ? 0.25 : -0.25) };
+      });
+    },
+    // DE t: "DE" sobe; o t laranja bate na colcheia seguinte
+    (vv) => {
+      const kd = outExpo(prog(vv, 0, 0.16));
+      font(300, size); text('DE', x0, base + (1 - kd) * size * 0.9, CREAM);
+      const { tx, tSize } = deTLayout();
+      const kt = prog(vv, E8 - 0.069, E8 + 0.151);   // atinge o tamanho final exatamente na colcheia
+      if (kt > 0) {
+        ctx.save();
+        ctx.translate(tx, base);
+        const s = lerp(2.6, 1, outBack(kt, 2.2));
+        ctx.rotate(lerp(-0.5, 0, outCubic(kt)));
+        ctx.scale(s, s);
+        font(700, tSize); text('t', 0, 0, ACC);
+        ctx.restore();
+      }
+      return tx - x0 + layout('t', tSize).width;
+    },
+  ];
+  const wordW = draws[w](v, 0);
+  ctx.restore();
+  // barra de destaque marca cada palavra no tempo
+  const kb = outExpo(prog(v, 0, 0.2));
+  ctx.fillStyle = ACC;
+  ctx.fillRect(x0 + 6, base + 60, Math.max(0, (wordW - 6) * kb), 20);
+  // o próprio argumento: seek(t) com o t real deste quadro, preso à ponta da barra (nada de etiqueta no canto)
+  font(400, 58, MONO);
+  text(`seek(${u.toFixed(3).replace('.', ',')})`, x0 + 6 + Math.max(0, (wordW - 6) * kb) + 30, base + 88, MUTED);
+}
+
+// ---------------------------------------------------------------- 2 · easing
+const G = { ox: 150, oy: 900, w: 900, h: 560 };
+const CURVES = [
+  ['inOutCubic(t)', inOutCubic], ['outBack(t)', (k) => outBack(k, 2.2)], ['outBounce(t)', outBounce],
+];
+function curveAt(u) {
+  // qual curva (com metamorfose de uma para a próxima a cada batida)
+  const b = Math.floor(u / BEAT);
+  if (b <= 1) return { f: CURVES[0][1], idx: 0, morph: 1 };
+  const i = Math.min(2, b - 1), m = outCubic(prog(u, b * BEAT, b * BEAT + 0.16));
+  return { f: (k) => lerp(CURVES[i - 1][1](k), CURVES[i][1](k), m), idx: i, morph: m };
+}
+function scene2(u) {
+  bg(INK);
+  const { ox, oy, w, h } = G;
+  // palavra-fundo
+  ctx.save();
+  clipRect(1120, 640, 800, 420);
+  font(300, 330); text('easing', 1150, 960 + 330 * (1 - outExpo(prog(u, 0.1, 0.4))), '#23231F');
+  ctx.restore();
+
+  // "DE" sai; o t encolhe e vira o rótulo do eixo do tempo
+  const { tx, tSize } = deTLayout();
+  ctx.save();
+  clipRect(0, S1.base - S1.size * 0.92, 1000, S1.size * 1.22);
+  font(300, S1.size); text('DE', S1.x0, S1.base + inCubic(prog(u, 0, 0.12)) * S1.size, CREAM);
+  ctx.restore();
+  const kt = inOutCubic(prog(u, 0, 0.34));
+  ctx.save();
+  ctx.translate(lerp(tx, ox + w + 30, kt), lerp(S1.base, oy + 26, kt));
+  const ts = lerp(1, 110 / tSize, kt);
+  ctx.scale(ts, ts);
+  font(700, tSize); text('t', 0, 0, ACC);
+  ctx.restore();
+
+  // eixos
+  const ax = outCubic(prog(u, 0.08, 0.34)), ay = outCubic(prog(u, 0.16, 0.42));
+  if (ax > 0) line(ox, oy, ox + w * ax, oy, MID, 4);
+  if (ay > 0) line(ox, oy, ox, oy - (h + 70) * ay, MID, 4);
+  for (let i = 1; i <= 4; i++) if (ax * 4 >= i) line(ox + (w * i) / 4, oy, ox + (w * i) / 4, oy + 14, MID, 3);
+  if (ay > 0.9) line(ox - 14, oy - h, ox, oy - h, MID, 3);
+
+  if (u < BEAT) return;
+  const { f, idx, morph } = curveAt(u);
+  const p = (u % BEAT) / BEAT;
+  const X = (k) => ox + w * k, Y = (val) => oy - h * val;
+  // curva (na 1ª batida ela é traçada pelo próprio cursor)
+  const upto = Math.floor(u / BEAT) === 1 ? p : 1;
+  ctx.beginPath();
+  for (let i = 0; i <= 120 * upto; i++) {
+    const k = i / 120;
+    i ? ctx.lineTo(X(k), Y(f(k))) : ctx.moveTo(X(k), Y(f(k)));
+  }
+  ctx.strokeStyle = CREAM; ctx.lineWidth = 10; ctx.lineJoin = ctx.lineCap = 'round'; ctx.stroke();
+  line(X(p), oy, X(p), oy - h - 70, DIM, 2);
+  ctx.beginPath(); ctx.arc(X(p), Y(f(p)), 16, 0, TAU); ctx.fillStyle = ACC; ctx.fill();
+
+  // nome da função, trocando por máscara
+  ctx.save();
+  clipRect(ox, 110, 1000, 100);
+  font(400, 76, MONO);
+  if (idx > 0 && morph < 1) text(CURVES[idx - 1][0], ox, 190 - 100 * morph, CREAM);
+  text(CURVES[idx][0], ox, 190 + 100 * (1 - (idx > 0 ? morph : 1)), CREAM);
+  ctx.restore();
+
+  // o mesmo movimento numa bola, com onion skin (casca de cebola)
+  const T0 = 1230, T1 = B3.x0, ty = B3.y0, R = B3.R;
+  line(T0, ty + R + 26, T1, ty + R + 26, DIM, 5);
+  for (let k = 5; k >= 1; k--) {
+    const pk = p - k * 0.055;
+    if (pk < 0) continue;
+    ctx.beginPath(); ctx.arc(lerp(T0, T1, f(pk)), ty, R, 0, TAU);
+    ctx.strokeStyle = MUTED; ctx.lineWidth = 4; ctx.globalAlpha = 0.75 - k * 0.12; ctx.stroke(); ctx.globalAlpha = 1;
+  }
+  ctx.beginPath(); ctx.arc(lerp(T0, T1, f(p)), ty, R, 0, TAU); ctx.fillStyle = ACC; ctx.fill();
+}
+
+// ---------------------------------------------------------------- 3 · física: squash & stretch
+const SHAPES = {
+  circle: () => 1,
+  squircle: (a) => 0.94 * (Math.abs(Math.cos(a)) ** 4 + Math.abs(Math.sin(a)) ** 4) ** -0.25,
+  triangle: (a) => 0.66 / Math.cos(((((a + Math.PI / 2) % (TAU / 3)) + TAU / 3) % (TAU / 3)) - Math.PI / 3),
+  flower: (a) => 0.9 + 0.22 * Math.cos(5 * (a + Math.PI / 2)),
+  square: (a) => 0.88 / Math.max(Math.abs(Math.cos(a)), Math.abs(Math.sin(a))),
+};
+const SEQ = ['circle', 'squircle', 'triangle', 'flower', 'square'];
+function shapePath(r, s0, s1, m) {
+  ctx.beginPath();
+  for (let i = 0; i <= 144; i++) {
+    const a = (i / 144) * TAU, rr = r * lerp(SHAPES[s0](a), SHAPES[s1](a), m);
+    i ? ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr) : ctx.moveTo(Math.cos(a) * rr, Math.sin(a) * rr);
+  }
+  ctx.closePath();
+}
+const B3 = { x0: 1740, x1: 330, y0: 520, floor: 880, R: 72 };   // começa onde a bola do easing parou
+const G3 = (2 * (B3.floor - B3.R - B3.y0)) / (E8 * E8);   // gravidade que faz cair 1 colcheia
+const IMPACTS = [0, 1, 2, 3].map((k) => E8 + k * BEAT);
+function ball3(u) {
+  const { x0, x1, y0, floor, R } = B3, yc = floor - R, vImp = (G3 * BEAT) / 2;
+  let y, vy;
+  if (u < E8) { y = y0 + 0.5 * G3 * u * u; vy = G3 * u; }
+  else { const ph = (u - E8) % BEAT; y = yc - (vImp * ph - 0.5 * G3 * ph * ph); vy = -(vImp - G3 * ph); }
+  const n = IMPACTS.filter((ti) => u >= ti - 0.03).length;
+  const near = Math.min(...IMPACTS.map((ti) => Math.abs(u - ti)));
+  const ti = IMPACTS.find((tt) => Math.abs(u - tt) === near);
+  const morph = n === 0 ? 0 : outCubic(prog(u, ti - 0.03, ti + 0.09));
+  return {
+    x: lerp(x0, x1, u / BAR), y, vy, vImp, R,
+    s0: SEQ[Math.max(0, n - 1)], s1: SEQ[n], m: n === 0 ? 1 : morph,
+    squash: Math.max(0, 1 - near / 0.07), rot: -TAU * (u / BAR),
+  };
+}
+function scene3(u) {
+  bg(CREAM);
+  ctx.save();
+  clipRect(0, 120, W, 760);
+  font(300, 560); text('física', 120, 760 + 560 * (1 - outExpo(prog(u, 0.05, 0.35))), '#E5E2D8');
+  ctx.restore();
+  const kf = outCubic(prog(u, 0, 0.22));
+  line(1800 - 1680 * kf, B3.floor, 1800, B3.floor, INK, 5);
+  font(400, 58, MONO);
+  text('squash & stretch', W / 2, B3.floor + 100, MUTED, 'center');
+
+  const b = ball3(u);
+  const hgt = (B3.floor - b.R - b.y) / 280;
+  ctx.beginPath();
+  ctx.ellipse(b.x, B3.floor + 6, b.R * (1.2 - 0.5 * hgt), 9 * (1 - 0.5 * hgt), 0, 0, TAU);
+  ctx.fillStyle = 'rgba(20,20,19,0.16)'; ctx.fill();
+  const st = (Math.abs(b.vy) / b.vImp) * 0.16 * (1 - b.squash);
+  const sx = (1 + 0.55 * b.squash) * (1 - st * 0.6), sy = (1 - 0.45 * b.squash) * (1 + st);
+  ctx.save();
+  ctx.translate(b.x, b.y + b.R);
+  ctx.scale(sx, sy);
+  ctx.translate(0, -b.R);
+  ctx.rotate(b.rot);
+  shapePath(b.R, b.s0, b.s1, b.m);
+  ctx.fillStyle = ACC; ctx.fill();
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------- 4 · sistema: grade
+// a peça (2, 3) da grade fica exatamente onde a bola terminou; o tamanho da peça casa com o quadrado final
+const GRID = { ox: B3.x1 - 300, oy: B3.y0 - 450, step: 150, tile: 120 };
+const T_PIX = ['..X..', '..X..', 'XXXXX', '..X..', '..X..', '..X.X', '...XX'];
+function inT(i, j) {
+  const c = i - 4, r = j;
+  return r >= 0 && r < 7 && c >= 0 && c < 5 && T_PIX[r][c] === 'X';
+}
+function scene4(u) {
+  bg(CREAM);
+  const { ox, oy, step, tile } = GRID;
+  for (let i = -1; i <= 13; i++) {
+    for (let j = -1; j <= 7; j++) {
+      const cx = ox + step * i, cy = oy + step * j;
+      if (cx < -80 || cx > W + 80 || cy < -80 || cy > H + 80) continue;
+      const origin = i === 2 && j === 3;
+      const d = Math.hypot(cx - B3.x1, cy - B3.y0) / 4200;
+      const kIn = origin ? 1 : prog(u, d, d + 0.22);
+      if (kIn <= 0) continue;
+      let s = kIn < 1 ? outBack(kIn, 2) : 1;
+      // batida 2: onda diagonal arredonda os quadrados
+      const kr = inOutCubic(prog(u, BEAT + (i + j) * 0.02, BEAT + (i + j) * 0.02 + 0.2));
+      // batida 3: onda da direita gira e volta a ser quadrado
+      const kq = inOutCubic(prog(u, 2 * BEAT + (12 - i) * 0.024, 2 * BEAT + (12 - i) * 0.024 + 0.24));
+      const radius = lerp(lerp(10, 60, kr), 12, kq);
+      s *= 1 - 0.45 * Math.sin(Math.PI * kq);
+      // batida 4: o t aparece em pixels de destaque, o resto vira ponto
+      const delayT = 3 * BEAT + (inT(i, j) ? j * 0.025 : 0);
+      const kt = inOutCubic(prog(u, delayT, delayT + 0.2));
+      const isT = inT(i, j);
+      s *= isT ? 1 + 0.12 * bump(u, delayT, 0.25) : lerp(1, 0.26, kt);
+      const size = tile * s;
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate((kq * Math.PI) / 2);
+      ctx.beginPath(); ctx.roundRect(-size / 2, -size / 2, size, size, Math.min(radius * s, size / 2));
+      // a peça de origem nasce laranja (era a bola) e escurece para entrar no sistema
+      ctx.fillStyle = isT && kt > 0 ? mixColor(INK, ACC, kt) : origin ? mixColor(ACC, INK, outCubic(prog(u, 0.05, 0.35))) : INK;
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+}
+
+// ---------------------------------------------------------------- 5 · dados (os números do próprio reel)
+function rollNumber(str, x, base, size, k, color, align = 'left') {
+  // número sobe de dentro da máscara
+  ctx.save();
+  font(700, size);
+  const wdt = ctx.measureText(str).width, left = align === 'left' ? x : x - wdt;
+  clipRect(left - 10, base - size * 0.8, wdt + 20, size * 0.95);
+  text(str, left, base + size * 0.85 * (1 - outExpo(k)), color);
+  ctx.restore();
+  return wdt;
+}
+function scene5(u) {
+  const kw = outExpo(prog(u, 0, 0.2)), px = W * (1 - kw);
+  if (kw < 1) { scene4(BAR - 1e-4); ctx.save(); clipRect(px, 0, W - px, H); }
+  bg(INK);
+  // 900 quadros
+  const n = Math.round(900 * outExpo(prog(u, 0.02, 0.44)));
+  rollNumber(String(n), 120, 640, 420, prog(u, 0.02, 0.2), CREAM);
+  font(400, 64, MONO);
+  text('quadros,', 130, 740, MID);
+  text('cada um = seek(t)', 130, 820, MUTED);
+  const X = 1000, X1 = 1790;
+  // 128 BPM + grade de 32 batidas
+  const k1 = prog(u, BEAT, BEAT + 0.2);
+  if (k1 > 0) {
+    const w1 = rollNumber(String(Math.round(128 * outExpo(k1))), X, 300, 210, k1, CREAM);
+    font(400, 64, MONO); text('BPM', X + w1 + 28, 300, MID);
+    for (let i = 0; i < 32; i++) {
+      const ki = prog(u, BEAT + 0.04 + i * 0.008, BEAT + 0.1 + i * 0.008);
+      if (ki <= 0) continue;
+      const x = lerp(X, X1, i / 31), hh = (i % 4 === 0 ? 46 : 26) * outBack(ki, 2);
+      line(x, 350, x, 350 + hh, i % 4 === 0 ? ACC : MUTED, 6);
+    }
+  }
+  // -14 LUFS + medidor
+  const k2 = prog(u, 2 * BEAT, 2 * BEAT + 0.2);
+  if (k2 > 0) {
+    const w2 = rollNumber('−14', X, 590, 210, k2, CREAM);
+    font(400, 64, MONO); text('LUFS', X + w2 + 28, 590, MID);
+    const km = outCubic(prog(u, 2 * BEAT + 0.05, 2 * BEAT + 0.35)), target = lerp(X, X1, 0.72);
+    ctx.fillStyle = DIM; ctx.beginPath(); ctx.roundRect(X, 634, X1 - X, 20, 10); ctx.fill();
+    ctx.fillStyle = MID; ctx.beginPath(); ctx.roundRect(X, 634, (target - X) * km, 20, 10); ctx.fill();
+    if (km > 0.95) line(target, 618, target, 670, ACC, 8);
+  }
+  // 0 × Math.random()
+  const k3 = prog(u, 3 * BEAT, 3 * BEAT + 0.2);
+  if (k3 > 0) {
+    const w3 = rollNumber('0', X, 880, 210, k3, ACC);
+    font(400, 68, MONO); text('Math.random()', X + w3 + 34, 864, CREAM);
+    const ks = outExpo(prog(u, 3 * BEAT + E8, 3 * BEAT + E8 + 0.18));
+    const mw = ctx.measureText('Math.random()').width;
+    if (ks > 0) line(X + w3 + 26, 842, X + w3 + 26 + (mw + 16) * ks, 842, ACC, 9);
+  }
+  if (kw < 1) {
+    ctx.restore();
+    ctx.fillStyle = ACC; ctx.fillRect(px - 36, 0, 36, H);   // borda de destaque da cortina
+  }
+}
+
+// ---------------------------------------------------------------- 6 · interface: microinterações
+const CARDS = [[150, 110], [990, 110], [150, 570], [990, 570]], CW = 780, CH = 400;
+function card(x, y, label) {
+  shadow(36, 12, 0.1);
+  ctx.fillStyle = WHITE; ctx.beginPath(); ctx.roundRect(x, y, CW, CH, 36); ctx.fill();
+  noShadow();
+  font(400, 40, MONO); text(label, x + 50, y + 78, MUTED);
+}
+function scene6content(u) {
+  bg(CREAM);
+  // toggle
+  {
+    const [x, y] = CARDS[0]; card(x, y, 'toggle');
+    const k = prog(u, E8, E8 + 0.24), e = outBack(k, 2);
+    const tx = x + 60, ty = y + 150, tw = 230, th = 116;
+    ctx.fillStyle = mixColor('#D6D3C9', ACC, clamp(k * 1.5));
+    ctx.beginPath(); ctx.roundRect(tx, ty, tw, th, th / 2); ctx.fill();
+    const kx = lerp(tx + th / 2, tx + tw - th / 2, e), st = 1 + 0.4 * Math.sin(Math.PI * clamp(k));
+    ctx.save(); ctx.translate(kx, ty + th / 2); ctx.scale(st, 1 / Math.sqrt(st));
+    shadow(10, 3, 0.18); ctx.beginPath(); ctx.arc(0, 0, 46, 0, TAU); ctx.fillStyle = WHITE; ctx.fill(); noShadow();
+    ctx.restore();
+    font(700, 58, MONO); text('render', x + 340, y + 212, INK);
+    ctx.save(); clipRect(x + 330, y + 236, 420, 76);
+    font(400, 50, MONO);
+    const kl = outCubic(prog(u, E8 + 0.1, E8 + 0.3));
+    text('desligado', x + 340, y + 290 - 76 * kl, MUTED);
+    text('ligado', x + 340, y + 290 + 76 * (1 - kl), ACC);
+    ctx.restore();
+  }
+  // botão
+  {
+    const [x, y] = CARDS[1]; card(x, y, 'botão');
+    const press = bump(u, BEAT, 0.14), done = outCubic(prog(u, BEAT + 0.1, BEAT + 0.3));
+    const bw = 470, bh = 124, bx = x + 60, by = y + 150;
+    ctx.save(); ctx.translate(bx + bw / 2, by + bh / 2); ctx.scale(1 - 0.09 * press, 1 - 0.09 * press);
+    ctx.fillStyle = mixColor(INK, ACC, done);
+    ctx.beginPath(); ctx.roundRect(-bw / 2, -bh / 2, bw, bh, bh / 2); ctx.fill();
+    ctx.save(); clipRect(-bw / 2, -bh / 2, bw, bh);
+    font(700, 54, MONO);
+    text('renderizar', 0, 18 - 90 * done, WHITE, 'center');
+    check(-96, 90 * (1 - done) - 2, 2, WHITE, 8, prog(u, BEAT + 0.18, BEAT + 0.36));
+    text('pronto', 36, 18 + 90 * (1 - done), WHITE, 'center');
+    ctx.restore(); ctx.restore();
+    font(400, 46, MONO); text('900/900 quadros', x + 64, y + 345, MUTED);
+  }
+  // progresso
+  {
+    const [x, y] = CARDS[2]; card(x, y, 'progresso');
+    const k = outCubic(prog(u, 2 * BEAT, 2 * BEAT + 0.42)), cx = x + 230, cy = y + 230;
+    ctx.beginPath(); ctx.arc(cx, cy, 118, 0, TAU); ctx.strokeStyle = TRACK; ctx.lineWidth = 24; ctx.stroke();
+    if (k > 0) {
+      ctx.beginPath(); ctx.arc(cx, cy, 118, -Math.PI / 2, -Math.PI / 2 + TAU * k);
+      ctx.strokeStyle = ACC; ctx.lineCap = 'round'; ctx.stroke();
+    }
+    font(700, 96); text(`${Math.round(100 * k)}%`, cx, cy + 34, INK, 'center');
+    font(700, 58, MONO); text('H.264', x + 420, y + 200, INK); text('CRF 16', x + 420, y + 268, INK);
+    font(400, 46, MONO); text('60 fps', x + 420, y + 330, MUTED);
+  }
+  // notificações
+  {
+    const [x, y] = CARDS[3]; card(x, y, 'notificações');
+    const rows = ['batidas medidas', 'som em −14 LUFS', 'seek(t) é pura'];
+    ctx.save(); clipRect(x, y, CW, CH);
+    rows.forEach((s, i) => {
+      const k = outExpo(prog(u, 3 * BEAT + i * S16, 3 * BEAT + i * S16 + 0.22));
+      if (k <= 0) return;
+      const ry = y + 108 + i * 96, rx = x + 44 + (1 - k) * 760;
+      ctx.fillStyle = CREAM; ctx.beginPath(); ctx.roundRect(rx, ry, CW - 88, 82, 41); ctx.fill();
+      ctx.beginPath(); ctx.arc(rx + 42, ry + 41, 12, 0, TAU); ctx.fillStyle = ACC; ctx.fill();
+      font(400, 46, MONO); text(s, rx + 76, ry + 56, INK);
+    });
+    ctx.restore();
+  }
+}
+function scene6(u) {
+  const k = inOutCubic(prog(u, 0, 0.24)), off = -W * k;
+  if (k < 1) { ctx.save(); ctx.translate(off, 0); scene5(BAR - 1e-4); ctx.restore(); }
+  ctx.save(); ctx.translate(off + W, 0); scene6content(u); ctx.restore();
+}
+
+// ---------------------------------------------------------------- 7 · ruído com semente: campo de fluxo
+const SEEDS = (() => {
+  const rnd = mulberry32(2026), out = [];
+  for (let i = 0; i < 260; i++) out.push([lerp(-150, W + 150, rnd()), lerp(-150, H + 150, rnd()), rnd() < 0.12]);
+  return out;
+})();
+function scene7content(u) {
+  bg(INK);
+  const grow = outCubic(prog(u, 0.02, 0.5)), steps = Math.floor(48 * grow);
+  const sweep = inCubic(prog(u, 3 * BEAT, BAR));
+  const sinceBeat = u % BEAT, pulse = 1 + 0.9 * Math.exp(-sinceBeat / 0.1);
+  const z = (7 * BAR + u) * 0.55;
+  for (const [sx, sy, hot] of SEEDS) {
+    let x = sx, y = sy;
+    ctx.beginPath(); ctx.moveTo(x + sweep * 1500, y);
+    for (let s = 0; s < steps; s++) {
+      let a = noise3(x * 0.0017, y * 0.0017, z) * TAU * 1.6;
+      a = lerp(a, 0, sweep);
+      x += Math.cos(a) * (10 + sweep * 30); y += Math.sin(a) * 10 * (1 - sweep);
+      ctx.lineTo(x + sweep * 1500, y);
+    }
+    ctx.strokeStyle = hot ? ACC : '#4A4944';
+    ctx.lineWidth = (hot ? 3.4 : 2.4) * pulse;
+    ctx.lineCap = 'round'; ctx.stroke();
+  }
+  ctx.save();
+  clipRect(0, 380, 1500, 320);
+  const kt = outExpo(prog(u, BEAT, BEAT + 0.22));
+  font(500, 180); text('ruído com semente', 130, 600 + 220 * (1 - kt), CREAM);
+  font(400, 60, MONO);
+  const km = outExpo(prog(u, BEAT + E8, BEAT + E8 + 0.22));
+  text('mulberry32(2026)', 136, 686 + 120 * (1 - km), MID);
+  ctx.restore();
+}
+function scene7(u) {
+  const k = inOutCubic(prog(u, 0, 0.26));
+  if (k >= 1) return scene7content(u);
+  scene6(BAR - 1e-4);
+  const [cx, cy] = [CARDS[2][0] + 230, CARDS[2][1] + 230];
+  ctx.save();
+  ctx.beginPath(); ctx.arc(cx, cy, 2400 * k, 0, TAU); ctx.clip();
+  scene7content(u);
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------- 8 · assinatura
+function scene8(u) {
+  bg(CREAM);
+  const x0 = 130, base = 600, size = 400;
+  const wName = letters('Claude', x0, base, size, (i) => {
+    // cada letra pousa numa fusa (i × 1/32): outBack(·, 1.6) toca a base em 38,5% da animação
+    const k = prog(u, i * S16 * 0.5 - 0.115, i * S16 * 0.5 + 0.185);
+    if (k <= 0) return null;
+    const r = mulberry32(i + 11)();
+    return { dy: -(1 - outBack(k, 1.6)) * 760, rot: (1 - outCubic(k)) * (r - 0.5) * 0.9, weight: lerp(300, 700, outCubic(k)), color: INK };
+  });
+  // o ponto final é a bola: cai e bate na linha de base na batida 4
+  const t0 = 3 * BEAT - E8, kb = prog(u, t0, 3 * BEAT), r = 40, bx = x0 + wName + 54;
+  if (kb > 0) {
+    const yb = lerp(-120, base - r, kb * kb);
+    const sq = Math.max(0, 1 - Math.abs(u - 3 * BEAT) / 0.08) * (u >= 3 * BEAT ? 1 : 0);
+    ctx.save(); ctx.translate(bx, yb + r); ctx.scale(1 + 0.5 * sq, 1 - 0.42 * sq);
+    ctx.beginPath(); ctx.arc(0, -r, r, 0, TAU); ctx.fillStyle = ACC; ctx.fill();
+    ctx.restore();
+  }
+  ctx.save();
+  clipRect(0, 640, W, 160);
+  const km = outExpo(prog(u, BEAT, BEAT + 0.24));
+  font(300, 150); text('motion designer', x0 + 6, 770 + 160 * (1 - km), INK);
+  ctx.restore();
+  font(300, 150);
+  const mdw = ctx.measureText('motion designer').width;
+  const ku = outExpo(prog(u, BEAT + E8, BEAT + E8 + 0.24));
+  ctx.fillStyle = ACC; ctx.fillRect(x0 + 10, 806, (mdw - 4) * ku, 14);
+  const line3 = '900 quadros, uma função: seek(t)';
+  const nc = Math.floor(line3.length * prog(u, 2 * BEAT, 2 * BEAT + 0.36));
+  font(400, 60, MONO); text(line3.slice(0, nc), x0 + 10, 920, MUTED);
+}
+
+// ---------------------------------------------------------------- montagem
+const SCENES = [scene1, scene2, scene3, scene4, scene5, scene6, scene7, scene8];
+function draw(t) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 1;
+  noShadow();
+  const i = Math.min(7, Math.floor(t / BAR + 1e-9));
+  SCENES[i](t - i * BAR);
+}
+window.seek = async (t) => {
+  await fontsReady;
+  draw(t);
+};
+
+// ---------------------------------------------------------------- trilha (sintetizada, 128 BPM, lá menor)
+const NOTE = (n) => 440 * 2 ** ((n - 69) / 12);
+const CHORDS = [
+  { root: 45, tones: [57, 60, 64] }, { root: 41, tones: [53, 57, 60] }, { root: 48, tones: [55, 60, 64] },
+  { root: 43, tones: [55, 59, 62] }, { root: 45, tones: [57, 60, 64] }, { root: 41, tones: [53, 57, 60] },
+  { root: 43, tones: [55, 59, 62] }, { root: 36, tones: [60, 64, 67] },
+];
+
+window.renderAudio = async (sr) => {
+  const ac = new OfflineAudioContext(2, Math.ceil(DUR * sr), sr);
+  const rnd = mulberry32(0x5eed);
+  const noise = ac.createBuffer(1, sr * 3, sr);
+  { const d = noise.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = rnd() * 2 - 1; }
+  const comp = new DynamicsCompressorNode(ac, { threshold: -18, knee: 6, ratio: 4, attack: 0.003, release: 0.1 });
+  comp.connect(ac.destination);
+  const bus = new GainNode(ac, { gain: 0.6 }); bus.connect(comp);
+  const echo = new DelayNode(ac, { delayTime: E8 * 1.5, maxDelayTime: 1 });
+  const fb = new GainNode(ac, { gain: 0.3 }), wet = new GainNode(ac, { gain: 0.28 });
+  echo.connect(fb).connect(echo); echo.connect(wet).connect(bus);
+  const send = (node, pan = 0, fx = 0) => {
+    const p = new StereoPannerNode(ac, { pan }); node.connect(p).connect(bus);
+    if (fx) p.connect(new GainNode(ac, { gain: fx })).connect(echo);
+  };
+  const env = (t, a, d, v) => {
+    const g = new GainNode(ac, { gain: 0 });
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v, t + a); g.gain.exponentialRampToValueAtTime(1e-4, t + a + d);
+    return g;
+  };
+  const noiseAt = (t, d) => { const s = new AudioBufferSourceNode(ac, { buffer: noise }); s.start(t, (t * 0.37) % 2); s.stop(t + d); return s; };
+  const osc = (type, f, t, d) => { const o = new OscillatorNode(ac, { type, frequency: f }); o.start(t); o.stop(t + d); return o; };
+  const filt = (type, frequency, Q = 1) => new BiquadFilterNode(ac, { type, frequency, Q });
+
+  const kick = (t, v = 0.95) => {
+    const o = osc('sine', 170, t, 0.42);
+    o.frequency.setValueAtTime(170, t); o.frequency.exponentialRampToValueAtTime(44, t + 0.11);
+    const g = env(t, 0.002, 0.36, v); o.connect(g); send(g);
+    const c = env(t, 0.001, 0.012, v * 0.5); noiseAt(t, 0.02).connect(filt('highpass', 2500)).connect(c); send(c);
+  };
+  const clap = (t, v = 0.32) => {
+    const g = new GainNode(ac, { gain: 0 });
+    for (const o of [0, 0.01, 0.021]) { g.gain.setValueAtTime(v, t + o); g.gain.exponentialRampToValueAtTime(v * 0.25, t + o + 0.008); }
+    g.gain.setValueAtTime(v * 0.8, t + 0.03); g.gain.exponentialRampToValueAtTime(1e-4, t + 0.22);
+    noiseAt(t, 0.3).connect(filt('bandpass', 1500, 0.8)).connect(g); send(g, -0.1, 0.1);
+  };
+  const hat = (t, v = 0.07, d = 0.04, pan = 0.2) => {
+    const g = env(t, 0.001, d, v); noiseAt(t, d + 0.03).connect(filt('highpass', 8000)).connect(g); send(g, pan);
+  };
+  const bass = (t, n, d = 0.2, v = 0.3) => {
+    const o = osc('sawtooth', NOTE(n), t, d + 0.05), s = osc('sine', NOTE(n), t, d + 0.05);
+    const g = env(t, 0.004, d, v); o.connect(filt('lowpass', 380, 1.4)).connect(g); s.connect(g); send(g);
+  };
+  const stab = (t, notes, v = 0.07, d = 0.32, cutoff = 3200) => {
+    const lp = filt('lowpass', cutoff, 3);
+    lp.frequency.setValueAtTime(cutoff, t); lp.frequency.exponentialRampToValueAtTime(300, t + d);
+    const g = env(t, 0.003, d, v); lp.connect(g); send(g, 0, 0.2);
+    for (const n of notes) for (const det of [-7, 7]) { const o = osc('sawtooth', NOTE(n), t, d + 0.05); o.detune.value = det; o.connect(lp); }
+  };
+  const pluck = (t, n, v = 0.08, d = 0.22, pan = 0) => {
+    const o = osc('square', NOTE(n), t, d + 0.05), lp = filt('lowpass', 4000, 5);
+    lp.frequency.setValueAtTime(5000, t); lp.frequency.exponentialRampToValueAtTime(400, t + d);
+    const g = env(t, 0.002, d, v); o.connect(lp).connect(g); send(g, pan, 0.22);
+  };
+  const bell = (t, n, v = 0.08, d = 1.0, pan = 0) => {
+    const f = NOTE(n), car = osc('sine', f, t, d + 0.1), mod = osc('sine', f * 3.5, t, d + 0.1);
+    const mg = new GainNode(ac, { gain: 0 });
+    mg.gain.setValueAtTime(f * 2, t); mg.gain.exponentialRampToValueAtTime(f * 0.05, t + 0.35);
+    mod.connect(mg).connect(car.frequency);
+    const g = env(t, 0.003, d, v); car.connect(g); send(g, pan, 0.3);
+  };
+  const blip = (t, f0, f1, v = 0.18, d = 0.1, pan = 0) => {
+    const o = osc('sine', f0, t, d + 0.05);
+    o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + d * 0.7);
+    const g = env(t, 0.002, d, v); o.connect(g); send(g, pan, 0.1);
+  };
+  const click = (t, v = 0.2, pan = 0) => {
+    const g = env(t, 0.001, 0.018, v); noiseAt(t, 0.03).connect(filt('bandpass', 3200, 2)).connect(g); send(g, pan);
+    blip(t, 2400, 1800, v * 0.4, 0.03, pan);
+  };
+  const swish = (t, v = 0.12, d = 0.18, f0 = 900, f1 = 7000) => {
+    const bp = filt('bandpass', f0, 1.3);
+    bp.frequency.setValueAtTime(f0, t); bp.frequency.exponentialRampToValueAtTime(f1, t + d);
+    const g = env(t, 0.01, d, v); noiseAt(t, d + 0.05).connect(bp).connect(g); send(g);
+  };
+  const riser = (t0, t1, v = 0.14) => {
+    const bp = filt('bandpass', 300, 1.6);
+    bp.frequency.setValueAtTime(300, t0); bp.frequency.exponentialRampToValueAtTime(8000, t1);
+    const g = new GainNode(ac, { gain: 0 });
+    g.gain.setValueAtTime(1e-4, t0); g.gain.exponentialRampToValueAtTime(v, t1 - 0.01); g.gain.setValueAtTime(0, t1);
+    noiseAt(t0, t1 - t0 + 0.02).connect(bp).connect(g); send(g);
+  };
+  const crash = (t, v = 0.16, d = 1.5) => {
+    const g = env(t, 0.002, d, v); noiseAt(t, d + 0.1).connect(filt('highpass', 3500)).connect(g); send(g, 0, 0.15);
+  };
+  const pad = (t0, t1, notes, v = 0.05) => {
+    const lp = filt('lowpass', 300, 2);
+    lp.frequency.setValueAtTime(300, t0); lp.frequency.exponentialRampToValueAtTime(4500, t1);
+    const g = new GainNode(ac, { gain: 0 });
+    g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(v, t0 + 0.3); g.gain.setValueAtTime(v, t1 - 0.02); g.gain.linearRampToValueAtTime(0, t1);
+    lp.connect(g); send(g, 0, 0.2);
+    for (const n of notes) for (const det of [-12, 0, 12]) { const o = osc('sawtooth', NOTE(n), t0, t1 - t0); o.detune.value = det; o.connect(lp); }
+  };
+
+  const bar = (i) => i * BAR;
+  // groove base dos compassos 2 a 6 (bumbo, palma no 2 e 4, chimbal, baixo em colcheias)
+  for (let i = 1; i <= 5; i++) {
+    const c = CHORDS[i];
+    for (let e = 0; e < 8; e++) {
+      const t = bar(i) + e * E8, onBeat = e % 2 === 0;
+      if (onBeat && i !== 2) kick(t, 0.85);
+      if (e === 2 || e === 6) clap(t);
+      hat(t, onBeat ? 0.04 : 0.08);
+      bass(t, onBeat ? c.root : c.root + 12, 0.18, onBeat ? 0.3 : 0.2);
+    }
+  }
+
+  // 1 · gancho: cada palavra é um acerto
+  for (let b = 0; b < 4; b++) {
+    const t = b * BEAT;
+    kick(t, 1); stab(t, CHORDS[0].tones.map((n) => n + 12), 0.08, 0.28); bass(t, 33, 0.3, 0.32);
+  }
+  swish(BEAT, 0.1); hat(2 * BEAT + E8, 0.06); hat(2 * BEAT + E8 + S16, 0.06);
+  kick(3 * BEAT + E8, 1); crash(3 * BEAT + E8, 0.12, 0.8); stab(3 * BEAT + E8, [69, 72, 76], 0.1, 0.45, 5000);  // o t laranja
+  riser(3 * BEAT + E8, bar(1), 0.08);
+
+  // 2 · easing: uma nota por curva
+  [[1, 72], [2, 76], [3, 79]].forEach(([b, n]) => { pluck(bar(1) + b * BEAT, n, 0.09, 0.3); bell(bar(1) + b * BEAT, n + 12, 0.04, 0.6); });
+
+  // 3 · física: o bumbo e o "boing" caem nos quiques (contratempo)
+  IMPACTS.forEach((ti, k) => { kick(bar(2) + ti, 0.9); blip(bar(2) + ti, 520 + k * 60, 190, 0.16, 0.14); });
+  swish(bar(2), 0.08);
+
+  // 4 · sistema: arpejo em semicolcheias sobre a grade
+  for (let s = 0; s < 16; s++) pluck(bar(3) + s * S16, CHORDS[3].tones[s % 3] + 12 + (s % 6 < 3 ? 0 : 12), 0.06, 0.16, s % 2 ? 0.25 : -0.25);
+  for (let s = 0; s < 16; s++) hat(bar(3) + s * S16, s % 2 ? 0.05 : 0.03, 0.03);
+  stab(bar(3) + 3 * BEAT, [67, 71, 74], 0.08, 0.3);
+
+  // 5 · dados: contagem em semicolcheias, um acerto por número
+  for (let s = 0; s < 4; s++) blip(bar(4) + s * S16, 1800 + s * 200, 1500, 0.07, 0.04);
+  stab(bar(4), [69, 72, 76], 0.07, 0.3);
+  [1, 2, 3].forEach((b) => stab(bar(4) + b * BEAT, [69, 72, 76].map((n) => n + (b === 3 ? 0 : 12)), 0.06, 0.22));
+  blip(bar(4) + 3 * BEAT + E8, 160, 70, 0.22, 0.18);   // o risco em Math.random()
+
+  // 6 · interface: cliques e confirmações
+  swish(bar(5), 0.12, 0.22);
+  click(bar(5) + E8, 0.22, -0.3); blip(bar(5) + E8 + S16, 900, 1300, 0.1, 0.06, -0.3);
+  click(bar(5) + BEAT, 0.25, 0.3); bell(bar(5) + BEAT + S16, 84, 0.06, 0.5, 0.3);
+  { const o = 2 * BEAT; for (let s = 0; s < 3; s++) blip(bar(5) + o + s * S16, 600 + s * 250, 700 + s * 250, 0.06, 0.05); bell(bar(5) + o + E8 + S16, 88, 0.05, 0.6); }
+  [0, 1, 2].forEach((i) => blip(bar(5) + 3 * BEAT + i * S16, 1200 + i * 300, 1600 + i * 300, 0.09, 0.07, 0.3));
+
+  // 7 · ruído: respiro, pad abrindo e subida para a assinatura
+  swish(bar(6), 0.14, 0.3, 400, 5000);
+  pad(bar(6), bar(7), [55, 59, 62, 67], 0.045);
+  for (let b = 0; b < 4; b++) { bass(bar(6) + b * BEAT, CHORDS[6].root, 0.4, 0.26); hat(bar(6) + b * BEAT + E8, 0.06); }
+  kick(bar(6), 0.9); kick(bar(6) + 2 * BEAT, 0.8);
+  for (let s = 0; s < 8; s++) clap(bar(6) + 2 * BEAT + s * S16, 0.06 + s * 0.025);
+  riser(bar(6) + BEAT, bar(7), 0.16);
+
+  // 8 · assinatura: impacto, letras em semicolcheias, ponto final na batida 4
+  kick(bar(7), 1); crash(bar(7), 0.2, 1.6); bass(bar(7), 36, 1.6, 0.36);
+  stab(bar(7), [60, 64, 67, 72], 0.09, 0.9, 6000);
+  [72, 74, 76, 79, 81, 84].forEach((n, i) => pluck(bar(7) + i * S16 * 0.5, n, 0.05, 0.18, -0.3 + i * 0.12));
+  swish(bar(7) + BEAT, 0.08); blip(bar(7) + BEAT + E8, 700, 1400, 0.06, 0.08);
+  for (let s = 0; s < 12; s++) hat(bar(7) + 2 * BEAT + s * (S16 / 2), 0.03, 0.015, -0.1);
+  blip(bar(7) + 3 * BEAT - E8, 1600, 500, 0.06, 0.22);
+  kick(bar(7) + 3 * BEAT, 0.8); [72, 76, 79, 84].forEach((n) => bell(bar(7) + 3 * BEAT, n, 0.05, 0.42));
+
+  return ac.startRendering();
+};
+</script>
+</html>

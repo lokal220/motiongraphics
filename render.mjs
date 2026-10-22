@@ -21,6 +21,8 @@
  *   --audio musica.mp3    usa essa música em vez de window.renderAudio
  *   --formato vertical    abre o filme com ?formato=vertical (a página monta FILM e a composição
  *                         para esse formato) e acrescenta "-vertical" ao nome da saída
+ *   --param chave=valor   passa ?chave=valor para a página, sem mudar o nome (pode repetir);
+ *                         ex.: --som --param trilha=musica para medir a grade só com a música
  *
  * Saída: H.264 yuv420p CRF 16, BT.709, áudio AAC normalizado em -14 LUFS (pico -1 dBTP).
  * Folhas de contato e quadros soltos vão para .render-tmp/<nome>/.
@@ -49,6 +51,7 @@ const { values: opt, positionals } = parseArgs({
     beats: { type: 'string' },
     audio: { type: 'string' },
     formato: { type: 'string' },
+    param: { type: 'string', multiple: true },
     help: { type: 'boolean', short: 'h' },
   },
 });
@@ -206,6 +209,11 @@ async function openFilm(browser, file) {
   await page.evaluateOnNewDocument(renderGuard);
   const url = pathToFileURL(file);
   if (opt.formato) url.searchParams.set('formato', opt.formato);
+  for (const p of opt.param ?? []) {
+    const i = p.indexOf('=');
+    if (i < 1) throw new Error(`--param espera chave=valor, veio "${p}"`);
+    url.searchParams.set(p.slice(0, i), p.slice(i + 1));
+  }
   await page.goto(url.href, { waitUntil: 'networkidle0' });
 
   const info = await page.evaluate(() => ({

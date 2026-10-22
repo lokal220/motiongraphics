@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<title>07 - lista de estados (Guia Mestre Vai de Lokal)</title>
+<!--
+  Filme de produto: um contêiner que nunca corta. Todo estado é o mesmo elemento mudando de tamanho,
+  raio e preenchimento; o conteúdo (capturas reais do guia, assets/guia) troca atrás de um desfoque curto,
+  e um cursor conduz cada mudança. 120 BPM, 8 compassos, 32 batidas; grade medida na trilha (beats.js).
+  Molas de forma fechada (zeta 0,85: no máximo um rebote mínimo); um valor com vários alvos é a soma de
+  uma mola por mudança. 60 fps, 4 subquadros por quadro misturados aqui mesmo, dentro de seek(t).
+  Render: node render.mjs filmes/07-lista-de-estados/index.html --out resultados/07-lista-de-estados.mp4
+  Trilha só de música (para medir a grade): --som --param trilha=musica
+-->
+<style>
+  @font-face { font-family: 'DM Sans'; src: url('../../assets/fonts/DMSans-variavel-latin.woff2') format('woff2'); font-weight: 100 1000; }
+  html, body { margin: 0; background: #F5F3F0; }
+  canvas { display: block; }
+</style>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script src="beats.js" onerror="void 0"></script>
+<script>
+'use strict';
+
+// ---------------------------------------------------------------- tempo
+const W = 1920, H = 1080, FPS = 60, SUB = 4, DUR = 16;
+window.FILM = { width: W, height: H, fps: FPS, duration: DUR };
+const BEAT = 0.5, E8 = BEAT / 2;
+// grade de batidas medida na trilha (librosa); sem ela, a grade teórica de 120 BPM
+const GRID = (window.BEATS && window.BEATS.beats && window.BEATS.beats.length >= 32)
+  ? window.BEATS.beats : Array.from({ length: 33 }, (_, i) => i * BEAT);
+const PERIOD = (GRID[GRID.length - 1] - GRID[0]) / (GRID.length - 1);
+const B = (n) => (n < GRID.length ? GRID[n] : GRID[GRID.length - 1] + (n - GRID.length + 1) * PERIOD);
+
+// ---------------------------------------------------------------- marca (variáveis do guia)
+const BG = '#F5F3F0', OR = '#EA6E1A', INK = '#2A1F18', WHITE = '#FFFFFF';
+const SANS = '"DM Sans"';
+const FRASE = ['Guia mestre da marca para', 'produção audiovisual'];   // o h1 do guia, quebrado em duas linhas
+
+// ---------------------------------------------------------------- molas de forma fechada
+const ZETA = 0.85;
+/** Resposta a um degrau (0 -> 1) de uma mola subamortecida; f em Hz. */
+// abaixo deste envelope a mola é dada como assentada e vale o alvo exato (o resto seria < 0,02 px):
+// é o que deixa o último quadro igual, pixel a pixel, ao primeiro
+const SETTLED = 1e-5;
+function step(tau, f = 2) {
+  if (tau <= 0) return 0;
+  const w = 2 * Math.PI * f, wd = w * Math.sqrt(1 - ZETA * ZETA), e = Math.exp(-ZETA * w * tau);
+  if (e < SETTLED) return 1;
+  return 1 - e * (Math.cos(wd * tau) + ((ZETA * w) / wd) * Math.sin(wd * tau));
+}
+/** Resposta a um impulso (sai do zero e volta ao zero). */
+function impulse(tau, f = 2.4) {
+  if (tau <= 0) return 0;
+  const w = 2 * Math.PI * f, wd = w * Math.sqrt(1 - ZETA * ZETA), e = Math.exp(-ZETA * w * tau);
+  return e < SETTLED ? 0 : e * Math.sin(wd * tau);
+}
+/** Valor com vários alvos = soma de uma mola por mudança. changes: [[t0, alvo, f?], ...] em ordem. */
+function track(t, v0, changes, f = 2) {
+  let v = v0, prev = v0;
+  for (const [t0, alvo, fi] of changes) { v += (alvo - prev) * step(t - t0, fi || f); prev = alvo; }
+  return v;
+}
+const clamp = (x, a = 0, z = 1) => Math.min(z, Math.max(a, x));
+const prog = (t, a, z) => clamp((t - a) / (z - a));
+const lerp = (a, z, k) => a + (z - a) * k;
+function mixHex(a, z, k) {
+  const p = (c) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
+  const x = p(a), y = p(z);
+  return `rgb(${x.map((v, i) => Math.round(lerp(v, y[i], clamp(k)))).join(',')})`;
+}
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// ---------------------------------------------------------------- arquivos (capturas reais do guia)
+const IMG = {};
+const NOMES = ['logo-branco', 'sumario', 'sumario-23', 's23-cabecalho', 's23-lista', 's23-lista-hover', 'frase-1-copiado',
+  'item-27', 'item-34', 'item-35', 'filtro-nenhum', 'filtro-todos', 'cenas-app', 'checklist-0', 'checklist-1', 'checklist-2',
+  'checklist-3', 'formato-916'];
+const assetsReady = Promise.all(NOMES.map((n) => new Promise((res, rej) => {
+  const im = new Image();
+  im.onload = () => res();
+  im.onerror = () => rej(new Error(`não carregou ${n}`));
+  im.src = `../../assets/guia/${n}.png`;
+  IMG[n] = im;
+})).concat([document.fonts.load(`800 60px ${SANS}`)]));
+
+// ---------------------------------------------------------------- o contêiner: estados e mudanças
+const K = {
+  logo: { cx: 960, cy: 540, w: 640, h: 330, r: 32, fill: 1 },     // o primeiro e o último quadro: só o logo
+  capa: { cx: 960, cy: 540, w: 1240, h: 600, r: 32, fill: 1 },
+  sumario: { cx: 960, cy: 540, w: 600, h: 940, r: 24, fill: 0 },
+  secao: { cx: 960, cy: 540, w: 1760, h: 840, r: 28, fill: 0 },
+  linha: { cx: 960, cy: 540, w: 1760, h: 214, r: 30, fill: 0 },   // a linha fica do tamanho que tinha na lista
+  item: { cx: 960, cy: 540, w: 700, h: 120, r: 24, fill: 0 },
+  filtro: { cx: 960, cy: 540, w: 1240, h: 150, r: 75, fill: 0 },
+  cenas: { cx: 960, cy: 540, w: 1400, h: 860, r: 32, fill: 0 },
+  check: { cx: 960, cy: 540, w: 1000, h: 700, r: 28, fill: 0 },
+  // o próprio contêiner vira o quadro 9:16 do guia (135x240 px, raio 8, aqui x4)
+  vertical: { cx: 960, cy: 540, w: 540, h: 960, r: 32, fill: 0 },
+  final: { cx: 960, cy: 540, w: 540, h: 960, r: 32, fill: 1 },
+};
+const MORPH = [   // [quando começa, estado] — cada um começa logo depois do clique que o causa
+  [B(1), K.capa], [B(3) + 0.04, K.sumario], [B(7) + 0.04, K.secao], [B(11) + 0.04, K.linha], [B(14) - 0.06, K.item],
+  [B(15) + 0.04, K.filtro], [B(18) + E8, K.cenas], [B(20) - 0.06, K.item], [B(21) + 0.04, K.check],
+  [B(25) - 0.06, K.item], [B(26) + 0.04, K.vertical], [B(27) + 0.04, K.final], [B(29) + 0.04, K.logo],
+];
+function container(t) {
+  const out = {};
+  for (const k of ['cx', 'cy', 'w', 'h', 'r', 'fill']) out[k] = track(t, K.logo[k], MORPH.map(([t0, s]) => [t0, s[k]]), k === 'fill' ? 2.6 : 2);
+  // pulso no primeiro tempo forte, "Copiado" e o resultado erguido na mão
+  out.s = 1 + 0.035 * impulse(t - B(0)) + 0.03 * impulse(t - B(12)) + track(t, 0, [[B(28), 0.03], [B(29) + 0.04, 0]], 2.2);
+  return out;
+}
+
+// ---------------------------------------------------------------- conteúdo (troca atrás de um desfoque curto)
+const IN = 0.14, OUT = 0.1;
+/** Visibilidade 0..1 e desfoque (px) de um conteúdo com entrada em tIn e saída em tOut. */
+function vis(t, tIn, tOut) {
+  const a = prog(t, tIn, tIn + IN), z = 1 - prog(t, tOut, tOut + OUT);
+  const k = Math.min(a, z);
+  return { k, blur: (1 - k) * 12 };
+}
+function drawWith(t, tIn, tOut, fn) {
+  const { k, blur } = vis(t, tIn, tOut);
+  if (k <= 0.001) return;
+  ctx.save();
+  ctx.globalAlpha = k;
+  if (blur > 0.2) ctx.filter = `blur(${blur.toFixed(2)}px)`;
+  fn();
+  ctx.restore();
+}
+/** Captura real desenhada com largura w; recorte opcional [sx, sy, sw, sh] em px da captura. */
+function img(name, x, y, w, crop) {
+  const im = IMG[name], [sx, sy, sw, sh] = crop || [0, 0, im.width, im.height], h = (w * sh) / sw;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(im, sx, sy, sw, sh, x, y, w, h);
+  return h;
+}
+const scaleOf = (name, w, cropW) => w / (cropW || IMG[name].width);
+
+// layouts (px de tela) de cada estado, com os alvos do cursor derivados das medidas reais
+const L = {
+  sumario: { x: 680, y: 70, w: 560, crop: [0, 1993, 738, 1238] },
+  secaoCab: [140, 160, 1640], secaoLista: { x: 140, y: 248, w: 1640, crop: [0, 0, 2580, 1122] },
+  linha: [140, 540 - (210 * 1640) / 2580 / 2, 1640],
+  item: [630, 501, 660],
+  filtroCrop: [0, 0, 1571, 109],
+  check: [490, 259, 940],
+  diagrama: [690, 60, 540],
+};
+/** Ponto (px de tela) dentro de um alvo medido; fx, fy = fração do retângulo onde a ponta do cursor para
+ *  (à direita e embaixo do rótulo, para a seta não cobrir o texto que muda). */
+function alvo(name, rect, [x, y, w, crop], fx = 0.5, fy = 0.5) {
+  const s = scaleOf(name, w, crop && crop[2]), oy = crop ? crop[1] : 0;
+  return [x + lerp(rect[0], rect[2], fx) * s, y + (lerp(rect[1], rect[3], fy) - oy) * s];
+}
+const M = {   // medidas reais (assets/guia/medidas.json), px da captura
+  s23: [0, 2569, 738, 2656], copiar: [2323, 52, 2541, 158], copiado: [2290, 52, 2541, 158],
+  todas: [0, 0, 195, 109], app: [394, 0, 556, 109],
+  c1: [75, 147, 114, 186], c2: [75, 311, 114, 350], c3: [75, 474, 114, 513],
+};
+const T23 = () => alvo('sumario', M.s23, [L.sumario.x, L.sumario.y, L.sumario.w, L.sumario.crop], 0.82, 0.6);
+const TCOPIAR = () => alvo('s23-lista', M.copiar, [L.secaoLista.x, L.secaoLista.y, L.secaoLista.w, L.secaoLista.crop], 0.8, 0.72);
+const TCOPIADO = () => alvo('frase-1-copiado', M.copiado, L.linha, 0.8, 0.72);
+const TITEM = [1170, 552];
+
+// o logo: o mesmo elemento no começo e no fim (o último quadro tem que repetir o primeiro)
+const LOGO_W = 440, LOGO_H = (440 * 356) / 800;
+const SEGURA = [690 + (540 * 59.5) / 135, 60 + (960 * 114.5) / 240];   // centro da área segura do 9:16 do guia
+const drawLogo = (cx, cy, w) => img('logo-branco', cx - w / 2, cy - (w * 356) / 800 / 2, w);
+/** H1 da capa: cada linha sobe por dentro de uma máscara, logo depois de a capa começar a crescer. */
+function drawTitulo(t) {
+  ctx.font = `800 60px ${SANS}`; ctx.fillStyle = WHITE; ctx.textAlign = 'left';
+  if ('letterSpacing' in ctx) ctx.letterSpacing = '-1.8px';
+  FRASE.forEach((l, i) => {
+    const base = 600 + i * 66, rise = 78 * (1 - step(t - (B(1) + 0.1 + i * 0.07), 2.4));
+    ctx.save();
+    ctx.beginPath(); ctx.rect(400, base - 62, 1100, 80); ctx.clip();
+    ctx.fillText(l, 420, base + rise);
+    ctx.restore();
+  });
+}
+const TC = (c) => alvo('checklist-0', M[c], L.check);
+
+const FW = [1150, 1310];   // largura do filtro no estado 4 e com as cenas abertas
+/** O filtro do banco de cenas, ancorado no topo do contêiner, com o indicador que estica. */
+function filtro(t, box) {
+  // cresce junto com o painel das cenas (mesma mola, mesmo instante): sem salto de tamanho
+  const fw = track(t, FW[0], [[B(18) + E8, FW[1]]]), x = box.x + (box.w - fw) / 2, y = box.y + 35;
+  const s = fw / L.filtroCrop[2], h = L.filtroCrop[3] * s;
+  img('filtro-nenhum', x, y, fw, L.filtroCrop);
+  // borda da frente (indo para a direita) numa mola rápida, a de trás numa lenta: o indicador estica
+  const tc = B(18);
+  const left = track(t, M.todas[0], [[tc, M.app[0]]], 1.5) * s + x;
+  const right = track(t, M.todas[2], [[tc, M.app[2]]], 3.2) * s + x;
+  ctx.save();
+  ctx.beginPath(); ctx.roundRect(left, y, right - left, h, h / 2); ctx.fillStyle = INK; ctx.fill();
+  ctx.clip();
+  img('filtro-todos', x, y, fw, L.filtroCrop);
+  ctx.restore();
+  return { x, y, fw, s, h };
+}
+
+/** Mudança pequena no mesmo layout (hover, item ativo, caixa marcada): a captura nova aparece por cima em
+ *  0,06 s, sem desfoque; o que não mudou fica parado. Só desenha a partir da última camada já completa. */
+function layers(t, names, changes, place) {
+  const a0 = ctx.globalAlpha, q = (i) => (i ? prog(t, changes[i - 1], changes[i - 1] + 0.06) : 1);
+  let from = 0;
+  names.forEach((_, i) => { if (q(i) >= 1) from = i; });
+  for (let i = from; i < names.length; i++) {
+    if (q(i) <= 0) break;
+    ctx.globalAlpha = a0 * q(i);
+    place(names[i]);
+  }
+  ctx.globalAlpha = a0;
+}
+
+let ctx;   // contexto do subquadro que está sendo desenhado
+function drawScene(t) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.filter = 'none';
+  ctx.fillStyle = BG; ctx.fillRect(0, 0, W, H);
+  const c = container(t);
+  const box = { x: c.cx - c.w / 2, y: c.cy - c.h / 2, w: c.w, h: c.h };
+  ctx.save();
+  ctx.translate(c.cx, c.cy); ctx.scale(c.s, c.s); ctx.translate(-c.cx, -c.cy);
+  // o contêiner (sombra macia do próprio guia; sem brilho, sem gradiente)
+  ctx.save();
+  ctx.shadowColor = 'rgba(42,31,24,0.08)'; ctx.shadowBlur = 40; ctx.shadowOffsetY = 14;
+  ctx.beginPath(); ctx.roundRect(box.x, box.y, box.w, box.h, Math.min(c.r, box.h / 2, box.w / 2));
+  ctx.fillStyle = mixHex(WHITE, OR, c.fill); ctx.fill();
+  ctx.restore();
+  ctx.save();
+  ctx.beginPath(); ctx.roundRect(box.x, box.y, box.w, box.h, Math.min(c.r, box.h / 2, box.w / 2)); ctx.clip();
+
+  // capa: o logo real vai para o canto quando a capa cresce, e a frase do produto (o h1 do guia) sobe
+  drawWith(t, -1, B(3), () => drawLogo(track(t, 960, [[B(1), 420 + LOGO_W / 2]]), track(t, 540, [[B(1), 290 + LOGO_H / 2]]), LOGO_W));
+  drawWith(t, -1, B(3), () => drawTitulo(t));
+  // estado 1: o sumário, e o "23" ganhando o fundo de ativo
+  drawWith(t, B(3) + 0.16, B(7), () => layers(t, ['sumario', 'sumario-23'], [B(6)], (n) => img(n, L.sumario.x, L.sumario.y, L.sumario.w, L.sumario.crop)));
+  // estado 2: a seção 23 (a lista e, depois, o mouse sobre "Copiar")
+  drawWith(t, B(7) + 0.16, B(11), () => img('s23-cabecalho', ...L.secaoCab));
+  drawWith(t, B(7) + 0.16, B(11), () => layers(t, ['s23-lista', 's23-lista-hover'], [B(10)], (n) => img(n, L.secaoLista.x, L.secaoLista.y, L.secaoLista.w, L.secaoLista.crop)));
+  // estado 3: só a linha, já "Copiado"
+  drawWith(t, B(11) + 0.16, B(14) - 0.06, () => img('frase-1-copiado', ...L.linha));
+  // linhas do sumário que levam às próximas seções
+  drawWith(t, B(14) + 0.08, B(15), () => img('item-27', ...L.item));
+  drawWith(t, B(20) + 0.08, B(21), () => img('item-34', ...L.item));
+  drawWith(t, B(25) + 0.08, B(26), () => img('item-35', ...L.item));
+  // estado 4: o filtro (indicador esticando até "App") e as cenas do tema App
+  drawWith(t, B(15) + 0.16, B(20) - 0.06, () => filtro(t, box));
+  drawWith(t, B(18) + E8 + 0.12, B(20) - 0.06, () => {
+    // ancorado no tamanho final, preso à borda de cima do painel; o contêiner recorta
+    const w = FW[1], x = 960 - w / 2, y = box.y + 150;
+    img('cenas-app', x, y, w, [0, 0, 2580, Math.round(((K.cenas.h - 170) * 2580) / w)]);
+  });
+  // estado 5: a checklist marcando item a item
+  drawWith(t, B(21) + 0.16, B(25) - 0.06, () => layers(t, ['checklist-0', 'checklist-1', 'checklist-2', 'checklist-3'], [B(22), B(23), B(24)], (n) => img(n, ...L.check)));
+  // estado 6: o quadro 9:16 das áreas seguras e, no clique, a peça pronta (logo branco a 56% da largura)
+  drawWith(t, B(26) + 0.16, B(27), () => img('formato-916', ...L.diagrama));
+  // (56% da largura, centrado na área segura: a regra da cartela final do guia); no último clique o mesmo
+  // logo volta, sem corte, para o lugar e o tamanho do quadro 0
+  drawWith(t, B(27) + 0.12, 99, () => {
+    const tb = B(29) + 0.04;
+    drawLogo(track(t, SEGURA[0], [[tb, 960]]), track(t, SEGURA[1], [[tb, 540]]), track(t, 0.56 * K.final.w, [[tb, LOGO_W]]));
+  });
+  ctx.restore();
+  ctx.restore();
+
+  drawCursor(t);
+}
+
+// ---------------------------------------------------------------- o cursor
+const REST = [1650, 930];
+const MOVES = () => [   // [quando sai, para onde, mola]
+  [B(2), [1180, 640]], [B(5), T23()], [B(9), TCOPIAR()],
+  [B(11) + 0.04, TCOPIADO(), 2],                       // a mão acompanha o botão quando a lista vira a linha
+  [B(13), TITEM], [B(17), filtroAlvoApp()],
+  [B(19), TITEM], [B(21) + E8, TC('c1')], [B(22) + E8, TC('c2')], [B(23) + E8, TC('c3')],
+  // no 9:16 o clique fica embaixo e à direita, dentro da área segura: o logo pousa livre
+  [B(24) + E8, TITEM], [B(26) + E8, [1085, 790]], [B(28) + E8, [1120, 870]],
+  [B(30), REST, 2.6],                                  // mola mais firme: parado e sem velocidade no último quadro
+];
+const CLICKS = [3, 7, 11, 15, 18, 21, 22, 23, 24, 26, 27, 29].map(B);
+function filtroAlvoApp() {
+  const fw = FW[0], x = K.filtro.cx - K.filtro.w / 2 + (K.filtro.w - fw) / 2, y = K.filtro.cy - K.filtro.h / 2 + 35, s = fw / L.filtroCrop[2];
+  return [x + lerp(M.app[0], M.app[2], 0.78) * s, y + L.filtroCrop[3] * s * 0.75];
+}
+function drawCursor(t) {
+  const moves = MOVES();
+  const x = track(t, REST[0], moves.map(([t0, p, f]) => [t0, p[0], f]), 1.8);
+  const y = track(t, REST[1], moves.map(([t0, p, f]) => [t0, p[1], f]), 1.8);
+  const press = CLICKS.reduce((a, tc) => a + Math.max(0, impulse(t - tc, 4)), 0);
+  const s = 1.9 * (1 - 0.18 * clamp(press));
+  ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
+  ctx.shadowColor = 'rgba(42,31,24,0.25)'; ctx.shadowBlur = 6; ctx.shadowOffsetY = 2;
+  ctx.beginPath();
+  [[0, 0], [0, 26], [6.5, 20], [10.5, 29.5], [14.5, 27.8], [10.6, 18.6], [18.5, 18.6]].forEach(([px, py], i) => (i ? ctx.lineTo(px, py) : ctx.moveTo(px, py)));
+  ctx.closePath(); ctx.fillStyle = INK; ctx.fill();
+  ctx.shadowColor = 'transparent'; ctx.lineWidth = 2.2; ctx.strokeStyle = WHITE; ctx.lineJoin = 'round'; ctx.stroke();
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------- quadro: 4 subquadros misturados (desfoque de movimento)
+const main = document.getElementById('c').getContext('2d');
+const scratch = document.createElement('canvas'); scratch.width = W; scratch.height = H;
+const sctx = scratch.getContext('2d');
+function draw(t) {
+  for (let k = 0; k < SUB; k++) {
+    const ts = t + (k - (SUB - 1) / 2) / (FPS * SUB);
+    if (k === 0) { ctx = main; drawScene(ts); continue; }
+    ctx = sctx; drawScene(ts);
+    main.setTransform(1, 0, 0, 1, 0, 0); main.filter = 'none';
+    main.globalAlpha = 1 / (k + 1); main.drawImage(scratch, 0, 0); main.globalAlpha = 1;
+  }
+}
+window.seek = async (t) => { await assetsReady; draw(t); };
+
+// ---------------------------------------------------------------- trilha (sintetizada, 120 BPM)
+const SO_MUSICA = new URLSearchParams(location.search).get('trilha') === 'musica';
+const NOTE = (n) => 440 * 2 ** ((n - 69) / 12);
+window.renderAudio = async (sr) => {
+  const ac = new OfflineAudioContext(2, Math.ceil(DUR * sr), sr);
+  const rnd = mulberry32(0x707);
+  const noise = ac.createBuffer(1, sr * 3, sr);
+  { const d = noise.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = rnd() * 2 - 1; }
+  const comp = new DynamicsCompressorNode(ac, { threshold: -18, knee: 8, ratio: 3, attack: 0.004, release: 0.12 });
+  comp.connect(ac.destination);
+  const bus = new GainNode(ac, { gain: 0.6 }); bus.connect(comp);
+  const echo = new DelayNode(ac, { delayTime: E8 * 1.5, maxDelayTime: 1 });
+  const fb = new GainNode(ac, { gain: 0.24 }), wet = new GainNode(ac, { gain: 0.22 });
+  echo.connect(fb).connect(echo); echo.connect(wet).connect(bus);
+  const send = (node, pan = 0, fx = 0) => {
+    const p = new StereoPannerNode(ac, { pan }); node.connect(p).connect(bus);
+    if (fx) p.connect(new GainNode(ac, { gain: fx })).connect(echo);
+  };
+  const env = (t, a, d, v) => {
+    const g = new GainNode(ac, { gain: 0 });
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v, t + a); g.gain.exponentialRampToValueAtTime(1e-4, t + a + d);
+    return g;
+  };
+  const noiseAt = (t, d) => { const s = new AudioBufferSourceNode(ac, { buffer: noise }); s.start(t, (t * 0.37) % 2); s.stop(t + d); return s; };
+  const osc = (type, f, t, d) => { const o = new OscillatorNode(ac, { type, frequency: f }); o.start(t); o.stop(t + d); return o; };
+  const filt = (type, frequency, q = 1) => new BiquadFilterNode(ac, { type, frequency, Q: q });
+
+  const kick = (t, v = 0.8) => { const o = osc('sine', 150, t, 0.4); o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(44, t + 0.1); const g = env(t, 0.002, 0.32, v); o.connect(g); send(g); };
+  const clap = (t, v = 0.2) => {
+    const g = new GainNode(ac, { gain: 0 });
+    for (const o of [0, 0.01, 0.02]) { g.gain.setValueAtTime(v, t + o); g.gain.exponentialRampToValueAtTime(v * 0.25, t + o + 0.008); }
+    g.gain.setValueAtTime(v * 0.7, t + 0.028); g.gain.exponentialRampToValueAtTime(1e-4, t + 0.2);
+    noiseAt(t, 0.25).connect(filt('bandpass', 1700, 0.9)).connect(g); send(g, -0.08, 0.1);
+  };
+  const hat = (t, v = 0.04) => { const g = env(t, 0.002, 0.035, v); noiseAt(t, 0.05).connect(filt('highpass', 8000)).connect(g); send(g, 0.2); };
+  const bass = (t, n, d = 0.2, v = 0.26) => { const o = osc('triangle', NOTE(n), t, d + 0.05), s = osc('sine', NOTE(n), t, d + 0.05); const g = env(t, 0.004, d, v); o.connect(filt('lowpass', 480)).connect(g); s.connect(g); send(g); };
+  const pluck = (t, n, v = 0.06, d = 0.22, pan = 0) => { const o = osc('square', NOTE(n), t, d + 0.05), lp = filt('lowpass', 3800, 4); lp.frequency.setValueAtTime(4200, t); lp.frequency.exponentialRampToValueAtTime(380, t + d); const g = env(t, 0.002, d, v); o.connect(lp).connect(g); send(g, pan, 0.2); };
+  const pad = (t0, t1, notes, v = 0.025) => {
+    const lp = filt('lowpass', 1100, 0.7), g = new GainNode(ac, { gain: 0 });
+    g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(v, t0 + 0.08); g.gain.setValueAtTime(v, t1 - 0.06); g.gain.linearRampToValueAtTime(0, t1);
+    lp.connect(g); send(g, 0, 0.15);
+    for (const n of notes) for (const det of [-6, 6]) { const o = osc('sawtooth', NOTE(n), t0, t1 - t0); o.detune.value = det; o.connect(lp); }
+  };
+  const bell = (t, n, v = 0.08, d = 0.9, pan = 0) => {
+    const f = NOTE(n), car = osc('sine', f, t, d + 0.1), mod = osc('sine', f * 2, t, d + 0.1);
+    const mg = new GainNode(ac, { gain: 0 }); mg.gain.setValueAtTime(f * 1.2, t); mg.gain.exponentialRampToValueAtTime(f * 0.04, t + 0.35);
+    mod.connect(mg).connect(car.frequency); const g = env(t, 0.003, d, v); car.connect(g); send(g, pan, 0.25);
+  };
+  const click = (t, v = 0.22, pan = 0) => { const g = env(t, 0.0005, 0.012, v); noiseAt(t, 0.02).connect(filt('bandpass', 3800, 3)).connect(g); send(g, pan); const o = osc('sine', 2600, t, 0.03), g2 = env(t, 0.0005, 0.018, v * 0.5); o.connect(g2); send(g2, pan); };
+  const tick = (t, v = 0.08) => { const g = env(t, 0.001, 0.02, v); noiseAt(t, 0.03).connect(filt('bandpass', 5200, 4)).connect(g); send(g, 0.15); };
+  const whoosh = (t, d = 0.26, v = 0.06) => {
+    const bp = filt('bandpass', 700, 1.2); bp.frequency.setValueAtTime(700, t); bp.frequency.exponentialRampToValueAtTime(4200, t + d);
+    const g = env(t, 0.01, d, v); noiseAt(t, d + 0.05).connect(bp).connect(g); send(g);
+  };
+
+  // música: 8 compassos que fecham em laço (sol volta para lá menor no compasso 1)
+  const CH = [[45, [69, 72, 76]], [41, [69, 72, 77]], [48, [67, 72, 76]], [43, [67, 71, 74]]];
+  for (let bar = 0; bar < 8; bar++) {
+    const t0 = bar * 4 * BEAT, [root, tones] = CH[bar % 4];
+    pad(t0, t0 + 4 * BEAT, tones.map((n) => n - 12), 0.022);
+    for (let s = 0; s < 16; s++) {
+      const t = t0 + s * (BEAT / 4);
+      if (s === 0 || s === 8) kick(t, s === 0 ? 0.85 : 0.7);
+      if (s === 4 || s === 12) clap(t);
+      if (s % 2 === 0) hat(t, s % 4 ? 0.05 : 0.03);
+      if (s % 2 === 0) bass(t, s % 4 ? root + 12 : root, 0.18, s % 4 ? 0.16 : 0.24);
+      if (bar >= 2 && s % 4 === 2) pluck(t, tones[((s >> 2) + bar) % 3] + 12, 0.045, 0.18, s % 8 === 2 ? -0.25 : 0.25);
+    }
+  }
+  if (!SO_MUSICA) {
+    // sons de interface nos picos medidos da trilha (beats.js)
+    CLICKS.forEach((tc, i) => click(tc, 0.24, i % 2 ? 0.15 : -0.15));
+    // o whoosh acompanha cada transformação, preso na semicolcheia medida mais próxima do início dela
+    const grid16 = (tm) => B(0) + Math.round((tm - B(0)) / (PERIOD / 4)) * (PERIOD / 4);
+    MORPH.forEach(([tm]) => whoosh(grid16(tm), 0.24, 0.05));
+    [6, 10].forEach((n) => tick(B(n), 0.09));                    // passar o mouse
+    [14, 20, 25].forEach((n) => tick(B(n), 0.07));               // a linha do sumário aparece
+    bell(B(12), 88, 0.08, 0.7); bell(B(12) + E8 / 2, 93, 0.07, 0.8);   // "Copiado"
+    bell(B(28), 84, 0.08, 0.9); bell(B(28) + E8 / 2, 91, 0.07, 1.0);   // o resultado na mão
+    bell(B(1), 76, 0.05, 0.8);                                   // a frase do produto
+  }
+  return ac.startRendering();
+};
+</script>
+</html>

@@ -1,0 +1,624 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<title>08 - som na batida (Vai de Lokal: ninguém em casa)</title>
+<!--
+  Filme de produto, versão 2: a dor de quem não tem ninguém em casa para receber a encomenda, e a virada
+  com a agência parceira. Um contêiner que nunca corta conta a história (interfone, porta, portaria,
+  calendário, a caixa voltando, a cortina laranja, o endereço, o mapa, o aviso, o logo e o botão).
+  Antes: câmera na mão, tinta e cinza. Depois: parado, branco e laranja (estrutura "Dor -> solução" do guia).
+
+  Uma só linha do tempo, em batidas, para imagem e trilha (120 BPM, 11 compassos, 22 s):
+    1. node render.mjs filmes/08-som-na-batida/index.html --som --out filmes/08-som-na-batida/audio/music.wav
+    2. python scripts/beats.py filmes/08-som-na-batida/audio/music.wav filmes/08-som-na-batida/beats.json
+    3. node render.mjs filmes/08-som-na-batida/index.html --cues filmes/08-som-na-batida/cues.json
+    4. node scripts/sfx.mjs filmes/08-som-na-batida/cues.json filmes/08-som-na-batida/audio/sfx.wav
+    5. node render.mjs filmes/08-som-na-batida/index.html --audio filmes/08-som-na-batida/audio/music.wav
+         --audio filmes/08-som-na-batida/audio/sfx.wav --out resultados/08-som-na-batida.mp4
+  A trilha (window.renderAudio) é escrita na grade teórica; a imagem e as deixas seguem a grade MEDIDA
+  (beats.js): mudanças de estado nas batidas, logo e botão nos tempos fortes, efeitos nos acertos.
+-->
+<style>
+  @font-face { font-family: 'DM Sans'; src: url('../../assets/fonts/DMSans-variavel-latin.woff2') format('woff2'); font-weight: 100 1000; }
+  @font-face { font-family: 'DM Mono'; src: url('../../assets/fonts/DMMono-500-latin.woff2') format('woff2'); font-weight: 500; }
+  html, body { margin: 0; background: #E9E5E0; }
+  canvas { display: block; }
+</style>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script src="beats.js" onerror="void 0"></script>
+<script>
+'use strict';
+
+// ---------------------------------------------------------------- tempo
+const W = 1920, H = 1080, FPS = 60, SUB = 4, BPM = 120, BEAT = 60 / BPM, E8 = BEAT / 2, BARS = 11;
+const DUR = BARS * 4 * BEAT;   // 22 s
+window.FILM = { width: W, height: H, fps: FPS, duration: DUR };
+
+// grade medida na trilha (beats.json -> beats.js); sem ela, a grade teórica
+const M = window.BEATS && window.BEATS.beats && window.BEATS.beats.length >= BARS * 4 ? window.BEATS : null;
+const GRID = M ? M.beats : Array.from({ length: BARS * 4 }, (_, i) => i * BEAT);
+const DOWN = M && M.downbeats ? M.downbeats : GRID.filter((_, i) => i % 4 === 0);
+const HITS = M && M.hits ? M.hits : GRID;
+const PERIOD = (GRID[GRID.length - 1] - GRID[0]) / (GRID.length - 1);
+const at = (k) => (k < GRID.length ? GRID[k] : GRID[GRID.length - 1] + (k - GRID.length + 1) * PERIOD);
+/** Tempo da batida n (aceita frações, para os gestos entre batidas). Nos tempos fortes usa a lista medida deles. */
+function TB(n) {
+  if (Number.isInteger(n) && n % 4 === 0 && DOWN[n / 4] != null) return DOWN[n / 4];
+  const i = Math.floor(n);
+  return at(i) + (n - i) * PERIOD;
+}
+/** O acerto (pico de ataque medido) mais perto de t; os efeitos caem nele. */
+function hit(t) {
+  let best = t, d = 0.08;
+  for (const h of HITS) if (Math.abs(h - t) < d) { d = Math.abs(h - t); best = h; }
+  return best;
+}
+
+// ---------------------------------------------------------------- marca (guia: só as informações)
+const OR = '#EA6E1A', INK = '#2A1F18', INK2 = '#6B5C4E', WHITE = '#FFFFFF';
+const LINE = '#CFC6BD', LIGHT = '#F1EDE9', ROAD = '#EEE9E3', MUTED = '#B5AA9F';
+const BG_DOR = '#E9E5E0', BG_DEPOIS = '#F5F3F0';
+const SANS = '"DM Sans"', MONO = '"DM Mono"';
+const HEAD = 80, LH = 92, UI = 40;      // dois tamanhos de texto por quadro: título e interface
+const COL = 150;                       // coluna do título, à esquerda; o objeto vive à direita
+const OX = 1330;                       // centro do objeto
+
+// ---------------------------------------------------------------- molas e curvas
+const ZETA = 0.85, SETTLED = 1e-5;
+function step(tau, f = 2) {
+  if (tau <= 0) return 0;
+  const w = 2 * Math.PI * f, wd = w * Math.sqrt(1 - ZETA * ZETA), e = Math.exp(-ZETA * w * tau);
+  if (e < SETTLED) return 1;
+  return 1 - e * (Math.cos(wd * tau) + ((ZETA * w) / wd) * Math.sin(wd * tau));
+}
+function impulse(tau, f = 2.4) {
+  if (tau <= 0) return 0;
+  const w = 2 * Math.PI * f, wd = w * Math.sqrt(1 - ZETA * ZETA), e = Math.exp(-ZETA * w * tau);
+  return e < SETTLED ? 0 : e * Math.sin(wd * tau);
+}
+/** Valor com vários alvos = soma de uma mola por mudança. changes: [[t0, alvo, f?], ...] em ordem. */
+function track(t, v0, changes, f = 2) {
+  let v = v0, prev = v0;
+  for (const [t0, alvo, fi] of changes) { v += (alvo - prev) * step(t - t0, fi || f); prev = alvo; }
+  return v;
+}
+const clamp = (x, a = 0, z = 1) => Math.min(z, Math.max(a, x));
+const prog = (t, a, z) => clamp((t - a) / (z - a));
+const lerp = (a, z, k) => a + (z - a) * k;
+function cubicBezier(x1, y1, x2, y2) {
+  const cx = 3 * x1, bx = 3 * (x2 - x1) - cx, ax = 1 - cx - bx, cy = 3 * y1, by = 3 * (y2 - y1) - cy, ay = 1 - cy - by;
+  const X = (u) => ((ax * u + bx) * u + cx) * u, Y = (u) => ((ay * u + by) * u + cy) * u, dX = (u) => (3 * ax * u + 2 * bx) * u + cx;
+  return (x) => {
+    if (x <= 0) return 0;
+    if (x >= 1) return 1;
+    let lo = 0, hi = 1, u = x;
+    for (let i = 0; i < 24; i++) { const v = X(u) - x; if (Math.abs(v) < 1e-6) break; v > 0 ? (hi = u) : (lo = u); const d = dX(u); u = d > 1e-6 ? u - v / d : (lo + hi) / 2; if (u < lo || u > hi) u = (lo + hi) / 2; }
+    return Y(u);
+  };
+}
+const easeOut = cubicBezier(0.22, 1, 0.36, 1);      // entrada da marca
+const easeIn = cubicBezier(0.55, 0, 0.75, 0.2);     // saída curta
+const easeInOut = cubicBezier(0.65, 0, 0.35, 1);    // a cortina da marca
+function mixHex(a, z, k) {
+  const p = (c) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
+  const x = p(a), y = p(z);
+  return `rgb(${x.map((v, i) => Math.round(lerp(v, y[i], clamp(k)))).join(',')})`;
+}
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// ---------------------------------------------------------------- arquivos
+const LOGO = new Image();
+const assetsReady = Promise.all([
+  new Promise((res, rej) => { LOGO.onload = res; LOGO.onerror = () => rej(new Error('não carregou o logo')); LOGO.src = '../../assets/guia/logo-branco.png'; }),
+  document.fonts.load(`800 ${HEAD}px ${SANS}`), document.fonts.load(`500 ${UI}px ${SANS}`), document.fonts.load(`700 ${UI}px ${SANS}`),
+  document.fonts.load(`500 ${UI}px ${MONO}`),
+]);
+const PIN = new Path2D('M50 22c-10 0-18 8-18 18 0 13 18 38 18 38s18-25 18-38c0-10-8-18-18-18zm0 25a7 7 0 1 1 0-14 7 7 0 0 1 0 14z');
+
+// ---------------------------------------------------------------- o roteiro, em batidas
+// estados do contêiner (centro, tamanho, raio, preenchimento 0 branco / 1 laranja)
+const K = {
+  interfone: { cx: OX, cy: 540, w: 460, h: 700, r: 48, fill: 0 },
+  porta: { cx: OX, cy: 540, w: 420, h: 720, r: 14, fill: 0 },
+  portaria: { cx: OX, cy: 540, w: 700, h: 460, r: 28, fill: 0 },
+  calendario: { cx: OX, cy: 540, w: 600, h: 580, r: 28, fill: 0 },
+  caixa: { cx: OX, cy: 540, w: 330, h: 300, r: 26, fill: 0 },
+  caixaLonge: { cx: 1745, cy: 604, w: 190, h: 172, r: 20, fill: 0 },
+  cortina: { cx: 960, cy: 540, w: 2000, h: 1160, r: 0, fill: 1 },
+  campo: { cx: OX, cy: 540, w: 880, h: 300, r: 32, fill: 0 },
+  mapa: { cx: OX, cy: 540, w: 820, h: 600, r: 30, fill: 0 },
+  aviso: { cx: OX, cy: 400, w: 900, h: 230, r: 56, fill: 0 },
+  logo: { cx: 960, cy: 540, w: 2000, h: 1160, r: 0, fill: 1 },
+};
+// [batida, estado, mola]: toda transformação começa numa batida; a cortina e o logo, em tempos fortes
+const MORPH = [
+  [8, K.porta], [10, K.portaria], [12, K.calendario], [14, K.caixa], [16, K.caixaLonge, 1.1],
+  [20, K.cortina, 1.5], [24, K.campo], [28, K.mapa], [32, K.aviso], [36, K.logo, 1.5],
+];
+const CLICKS = [1, 4, 9, 11, 13, 25, 42];   // cada clique do cursor
+const POPS = [29, 31, 32, 40];              // o pin cai, a encomenda chega ao pin, o aviso, o botão
+const LOGO_AT = 36, BOTAO_AT = 40;          // os dois momentos grandes, em tempos fortes
+
+// títulos: [entra, sai, linhas]; uma linha com `em` entra depois, na batida dela; [texto, cor] pinta a palavra-chave
+const TITULOS = [
+  { de: 0, ate: 8, linhas: ['Sua compra', 'chegou.', { txt: 'Você não estava.', cor: INK2, em: 3 }] },
+  { de: 8, ate: 10, linhas: ['Torcer pelo', 'vizinho.'] },
+  { de: 10, ate: 12, linhas: ['Pelo porteiro.'] },
+  { de: 12, ate: 14, linhas: ['Pela terceira', 'tentativa.'] },
+  { de: 14, ate: 20, linhas: ['Devolvido ao', 'remetente.', { txt: 'De novo.', cor: INK2, em: 16 }] },
+  { de: 20, ate: 24, cor: WHITE, depois: 0.4, tam: 124, linhas: ['Compre onde quiser.', { txt: 'A gente recebe pra você.', em: 22 }] },
+  { de: 24, ate: 28, linhas: ['Use o endereço', [['de uma ', INK], ['agência', OR]], [['parceira.', OR]]] },
+  { de: 28, ate: 32, linhas: ['A agência', 'parceira recebe', 'pra você.'] },
+  { de: 32, ate: 34, linhas: ['A gente', 'te avisa.'] },
+  { de: 34, ate: 36, linhas: ['Você retira', [['quando puder.', OR]]] },
+];
+
+// ---------------------------------------------------------------- desenho: traços que se desenham (ícones de linha da marca)
+let ctx;
+function pen(color, width) { ctx.strokeStyle = color; ctx.lineWidth = width; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; }
+/** Polilinha desenhada até a fração p do comprimento. */
+function path(pts, p = 1, closed = false) {
+  if (p <= 0) return;
+  const P = closed ? pts.concat([pts[0]]) : pts;
+  let total = 0;
+  const seg = [];
+  for (let i = 1; i < P.length; i++) { const l = Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]); seg.push(l); total += l; }
+  let budget = total * Math.min(1, p);
+  ctx.beginPath(); ctx.moveTo(P[0][0], P[0][1]);
+  for (let i = 1; i < P.length; i++) {
+    const l = seg[i - 1];
+    if (budget >= l) { ctx.lineTo(P[i][0], P[i][1]); budget -= l; continue; }
+    const k = budget / l;
+    ctx.lineTo(lerp(P[i - 1][0], P[i][0], k), lerp(P[i - 1][1], P[i][1], k));
+    break;
+  }
+  if (closed && p >= 1) ctx.closePath();
+  ctx.stroke();
+}
+const arcPts = (cx, cy, r, a0, a1, n = 48) => Array.from({ length: n + 1 }, (_, i) => { const a = a0 + ((a1 - a0) * i) / n; return [cx + r * Math.cos(a), cy + r * Math.sin(a)]; });
+function rrPts(x, y, w, h, r) {
+  const pts = [];
+  const c = (cx, cy, a0) => arcPts(cx, cy, r, a0, a0 + Math.PI / 2, 8).forEach((q) => pts.push(q));
+  c(x + w - r, y + r, -Math.PI / 2); c(x + w - r, y + h - r, 0); c(x + r, y + h - r, Math.PI / 2); c(x + r, y + r, Math.PI);
+  return pts;
+}
+/** Ponto a uma fração p do comprimento de uma polilinha. */
+function along(pts, p) {
+  let total = 0;
+  const seg = [];
+  for (let i = 1; i < pts.length; i++) { const l = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); seg.push(l); total += l; }
+  let d = total * clamp(p);
+  for (let i = 1; i < pts.length; i++) {
+    if (d <= seg[i - 1]) { const k = d / seg[i - 1]; return [lerp(pts[i - 1][0], pts[i][0], k), lerp(pts[i - 1][1], pts[i][1], k)]; }
+    d -= seg[i - 1];
+  }
+  return pts[pts.length - 1];
+}
+function fillRR(x, y, w, h, r, color) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); ctx.fillStyle = color; ctx.fill(); }
+function text(s, x, y, font, color, align = 'left', spacing = '0px') {
+  ctx.font = font; ctx.fillStyle = color; ctx.textAlign = align;
+  if ('letterSpacing' in ctx) ctx.letterSpacing = spacing;
+  ctx.fillText(s, x, y);
+}
+/** Texto de interface que troca subindo por dentro de uma máscara (sem fade, sem desfoque). */
+function swapText(t, states, x, y, h, font, color, align = 'left', spacing = '0px') {
+  // states: [[t0, texto, fonte?, cor?], ...]; o atual sai para cima enquanto o próximo sobe
+  for (let i = 0; i < states.length; i++) {
+    const [t0, s, f = font, c = color] = states[i], t1 = i + 1 < states.length ? states[i + 1][0] : Infinity;
+    if (t < t0 || !s) continue;
+    const ein = easeOut(prog(t, t0, t0 + 0.32)), eout = t1 === Infinity ? 0 : easeIn(prog(t, t1, t1 + 0.2));
+    if (eout >= 1) continue;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x - 400, y - h * 0.78, 800 + (align === 'left' ? 400 : 0), h * 1.05); ctx.clip();
+    text(s, x, y + h * 0.8 * (1 - ein) - h * eout, f, c, align, spacing);
+    ctx.restore();
+  }
+}
+/** Progresso de entrada do elemento i de um estado que começa em t0 (traços desenhando em cascata). */
+const draw = (t, t0, i = 0, d = 0.45) => easeOut(prog(t, t0 + i * 0.05, t0 + i * 0.05 + d));
+/** Ondas de som saindo de um botão apertado (contorno fino, sem brilho). */
+function ripples(t, tc, x, y, r0) {
+  for (let j = 0; j < 2; j++) {
+    const u = prog(t, tc + j * 0.14, tc + j * 0.14 + 0.7);
+    if (u <= 0 || u >= 1) continue;
+    ctx.save(); ctx.globalAlpha = 0.35 * (1 - u); pen(INK, 4);
+    ctx.beginPath(); ctx.arc(x, y, r0 + 90 * easeOut(u), 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  }
+}
+function pin(x, y, s, color = OR) {
+  ctx.save(); ctx.translate(x - 50 * s, y - 78 * s); ctx.scale(s, s);
+  ctx.fillStyle = color; ctx.fill(PIN, 'evenodd');
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------- o conteúdo de cada estado (coordenadas no centro do contêiner)
+const STAGES = [
+  { de: -1, ate: 8, fn: interfone }, { de: 8, ate: 10, fn: porta }, { de: 10, ate: 12, fn: portaria },
+  { de: 12, ate: 14, fn: calendario }, { de: 14, ate: 20, fn: caixa, escala: true }, { de: 24, ate: 28, fn: campo },
+  { de: 28, ate: 32, fn: mapa }, { de: 32, ate: 36, fn: aviso },
+];
+function interfone(t, t0) {
+  pen(INK, 6);
+  for (let i = 0; i < 5; i++) path([[-90, -272 + i * 26], [90, -272 + i * 26]], draw(t, t0, i));
+  fillRR(-185, -150, 370, 104, 20, LIGHT);
+  const fala = [[-1, '—'], [TB(1), 'CHAMANDO…'], [TB(3), 'SEM RESPOSTA'], [TB(4), 'CHAMANDO…'], [TB(6), 'SEM RESPOSTA']];
+  swapText(t, fala, 0, -84, UI, `500 ${UI}px ${MONO}`, INK2, 'center', '1px');
+  // o botão: aro, disco que afunda no clique e o sino de linha
+  const press = Math.max(0, impulse(t - TB(1), 4)) + Math.max(0, impulse(t - TB(4), 4));
+  pen(INK, 6); path(arcPts(0, 160, 86, -Math.PI / 2, Math.PI * 1.5, 64), draw(t, t0, 5, 0.6));
+  ctx.save(); ctx.translate(0, 160); ctx.scale(1.12 * (1 - 0.08 * press), 1.12 * (1 - 0.08 * press));
+  ctx.beginPath(); ctx.arc(0, 0, 60, 0, Math.PI * 2); ctx.fillStyle = LIGHT; ctx.fill();
+  pen(INK, 6);
+  path([[-26, 16], [-20, 8]].concat(arcPts(0, -2, 20, Math.PI, Math.PI * 2, 16), [[20, 8], [26, 16], [-26, 16]]), draw(t, t0, 6));
+  ctx.beginPath(); ctx.arc(0, 26, 5, 0, Math.PI * 2); ctx.fillStyle = INK; ctx.fill();
+  ctx.restore();
+  ripples(t, TB(1), 0, 160, 86); ripples(t, TB(4), 0, 160, 86);
+}
+function porta(t, t0) {
+  const knock = 7 * impulse(t - TB(9), 5);
+  ctx.translate(knock, 0);
+  pen(INK, 6);
+  path(rrPts(-140, -310, 280, 250, 12), draw(t, t0, 0, 0.5), true);
+  path(rrPts(-140, -20, 280, 270, 12), draw(t, t0, 1, 0.5), true);
+  path(arcPts(0, -335, 9, 0, Math.PI * 2, 24), draw(t, t0, 2), true);
+  const k = draw(t, t0, 3);
+  ctx.beginPath(); ctx.arc(150, -40, 16 * k, 0, Math.PI * 2); ctx.fillStyle = INK; ctx.fill();
+}
+function portaria(t, t0) {
+  swapText(t, [[t0 + 0.05, 'PORTARIA']], -300, -160, UI, `500 ${UI}px ${MONO}`, INK, 'left', '3px');
+  pen(INK, 6); path(rrPts(-300, -122, 600, 210, 14), draw(t, t0, 0, 0.55), true);
+  pen(LINE, 5);
+  for (let i = 0; i < 6; i++) path([[-276, -96 + i * 31], [276, -96 + i * 31]], draw(t, t0, 1 + i * 0.6));
+  pen(INK, 6); path([[-340, 128], [340, 128]], draw(t, t0, 3));
+  const press = Math.max(0, impulse(t - TB(11), 4));
+  ctx.save(); ctx.translate(230, 128); ctx.scale(1 - 0.1 * press, 1 - 0.1 * press);
+  pen(INK, 6); path(arcPts(0, 0, 36, Math.PI, Math.PI * 2, 24).concat([[-36, 0]]), draw(t, t0, 5));
+  path([[0, -36], [0, -48]], draw(t, t0, 6));
+  ctx.restore();
+  ripples(t, TB(11), 230, 108, 50);
+}
+const CELL = (r, c) => [-254 + c * 106, -150 + r * 106];
+const X_MARCAS = [[0, 1], [1, 3], [2, 2]];
+function calendario(t, t0) {
+  ctx.fillStyle = INK; ctx.fillRect(-300, -290, 600 * draw(t, t0, 0, 0.5), 100);
+  pen(LINE, 4);
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 5; c++) { const [x, y] = CELL(r, c); path(rrPts(x, y, 84, 84, 14), draw(t, t0, 1 + (r * 5 + c) * 0.25, 0.4), true); }
+  // duas tentativas já marcadas; a terceira, no clique
+  const quando = [t0 + 0.35, t0 + 0.5, TB(13)];
+  pen(INK, 7);
+  X_MARCAS.forEach(([r, c], i) => {
+    const [x, y] = CELL(r, c), e1 = easeOut(prog(t, quando[i], quando[i] + 0.14)), e2 = easeOut(prog(t, quando[i] + 0.1, quando[i] + 0.24));
+    path([[x + 22, y + 22], [x + 62, y + 62]], e1); path([[x + 62, y + 22], [x + 22, y + 62]], e2);
+  });
+}
+function caixa(t, t0) {
+  pen(INK, 6);
+  path(rrPts(-100, -30, 200, 140, 10), draw(t, t0, 0, 0.5), true);
+  path([[-100, -30], [-76, -96], [76, -96], [100, -30]], draw(t, t0, 1));
+  path([[0, -96], [0, -30]], draw(t, t0, 2));
+  pen(INK, 5); path(rrPts(-74, 14, 64, 40, 6), draw(t, t0, 3), true);
+}
+function campo(t, t0) {
+  swapText(t, [[t0 + 0.12, 'ENDEREÇO DE ENTREGA']], -390, -72, UI, `500 ${UI}px ${MONO}`, INK2, 'left', '1px');
+  const foco = easeOut(prog(t, TB(25), TB(25) + 0.2));
+  pen(mixHex(LINE, OR, foco), 4); path(rrPts(-390, -38, 780, 128, 26), draw(t, t0, 1, 0.55), true);
+  swapText(t, [[t0 + 0.25, 'Sua casa', `500 ${UI}px ${SANS}`, MUTED], [TB(26), 'Agência parceira', `700 ${UI}px ${SANS}`, OR]], -354, 40, UI);
+  if (foco > 0) {
+    ctx.font = `700 ${UI}px ${SANS}`;
+    if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+    const w = t >= TB(26) ? ctx.measureText('Agência parceira').width * easeOut(prog(t, TB(26), TB(26) + 0.32)) : 0;
+    ctx.save(); ctx.globalAlpha = foco; pen(INK, 3); path([[-348 + w + 6, -2], [-348 + w + 6, 54]]); ctx.restore();
+  }
+}
+const ROTA = [[-222, 186], [-200, 210], [40, 210], [40, 60], [250, 60], [250, 4]];
+function mapa(t, t0) {
+  pen(ROAD, 10);
+  [[-410, -150, 410, -150], [-410, 60, 410, 60], [-410, 210, 410, 210], [-200, -300, -200, 300], [40, -300, 40, 300], [260, -300, 260, 300]]
+    .forEach(([a, b, c, d], i) => path([[a, b], [c, d]], draw(t, t0, i * 0.5, 0.5)));
+  // a casa fica cinza: não é mais o destino
+  const [hx, hy] = [-60, -200];
+  pen(MUTED, 6);
+  path([[hx - 50, hy + 10], [hx, hy - 34], [hx + 50, hy + 10]], draw(t, t0, 3));
+  path(rrPts(hx - 38, hy + 6, 76, 62, 6), draw(t, t0, 4), true);
+  // a loja (sacola) e a rota tracejada laranja até a agência
+  const [sx, sy] = [-262, 168];
+  pen(INK, 6);
+  path(rrPts(sx - 36, sy - 30, 72, 76, 8), draw(t, t0, 3), true);
+  path(arcPts(sx, sy - 30, 20, Math.PI, Math.PI * 2, 16), draw(t, t0, 4));
+  ctx.save(); pen(OR, 7); ctx.setLineDash([20, 16]);
+  path(ROTA, easeOut(prog(t, t0 + 0.2, TB(29) + 0.15)));
+  ctx.restore();
+  // o pin cai e assenta (pop leve), e a encomenda anda pela rota até ele
+  const drop = step(t - TB(29), 2.6);
+  if (t >= TB(29)) {
+    ctx.save(); ctx.globalAlpha = 0.12 * drop; ctx.fillStyle = INK;
+    ctx.beginPath(); ctx.ellipse(250, 6, 30 * drop, 9 * drop, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    pin(250, 4 - 110 * (1 - drop), 2.6);
+  }
+  const ida = easeInOut(prog(t, TB(30), TB(31)));
+  if (t >= TB(30) && ida < 1) {
+    const [x, y] = along(ROTA, ida);
+    fillRR(x - 15, y - 15, 30, 30, 6, OR);
+  }
+}
+function aviso(t, t0) {
+  const e = step(t - t0 - 0.08, 2.6);
+  ctx.save(); ctx.translate(-340, 0); ctx.scale(e, e);
+  fillRR(-72, -72, 144, 144, 34, OR); pin(0, 38, 1.35, WHITE);
+  ctx.restore();
+  swapText(t, [[t0 + 0.14, 'Vai de LOKAL']], -236, -12, UI, `700 ${UI}px ${SANS}`, INK);
+  swapText(t, [[t0 + 0.21, 'Sua encomenda chegou!']], -236, 46, UI, `500 ${UI}px ${SANS}`, INK);
+}
+
+// ---------------------------------------------------------------- o contêiner
+function container(t) {
+  const out = {};
+  for (const k of ['cx', 'cy', 'w', 'h', 'r']) out[k] = track(t, K.interfone[k], MORPH.map(([n, s, f]) => [TB(n), s[k], f]));
+  out.fill = track(t, 0, MORPH.map(([n, s]) => [TB(n), s.fill]), 5);   // a cor vira rápido: sem passar tempo no pêssego
+  return out;
+}
+/** Câmera na mão no "antes" (soma de senos com fases fixas: função pura do tempo); parada depois da virada. */
+function camera(t) {
+  const a = 1 - step(t - TB(20), 1.6);
+  if (a <= 0) return [0, 0, 0];
+  const s = (f, ph) => Math.sin(2 * Math.PI * f * t + ph);
+  return [6 * a * (s(0.31, 1.3) + 0.6 * s(0.73, 4.1) + 0.3 * s(1.37, 2.2)),
+    5 * a * (s(0.27, 0.4) + 0.6 * s(0.81, 3.3) + 0.3 * s(1.51, 5.6)),
+    0.0022 * a * (s(0.23, 2.7) + 0.5 * s(0.67, 0.9))];
+}
+
+// ---------------------------------------------------------------- títulos (entram por linha, subindo na máscara; saem antes da próxima mudança)
+function titulos(t) {
+  for (const h of TITULOS) {
+    const tIn = TB(h.de) + (h.depois ?? 0.08), tOut = TB(h.ate) - 0.26;
+    if (t < tIn || t > tOut + 0.4) continue;
+    // a cortina é o único texto do quadro: pode ser maior (continua um tamanho só por quadro)
+    const size = h.tam || HEAD, lh = Math.round(size * 1.15), n = h.linhas.length, top = 540 - (n * lh) / 2;
+    h.linhas.forEach((ln, i) => {
+      const obj = typeof ln === 'object' && !Array.isArray(ln) ? ln : { txt: ln };
+      const segs = Array.isArray(obj.txt) ? obj.txt : [[obj.txt, obj.cor || h.cor || INK]];
+      const t0 = obj.em != null ? TB(obj.em) + 0.08 : tIn + i * 0.07;
+      const e = easeOut(prog(t, t0, t0 + 0.56)), x = easeIn(prog(t, tOut + i * 0.04, tOut + i * 0.04 + 0.24));
+      if (e <= 0 || x >= 1) return;
+      const base = top + (i + 1) * lh - size * 0.275;
+      ctx.save();
+      ctx.beginPath(); ctx.rect(COL - 20, base - size * 0.925, 1760, lh + 6); ctx.clip();
+      ctx.font = `800 ${size}px ${SANS}`; ctx.textAlign = 'left';
+      if ('letterSpacing' in ctx) ctx.letterSpacing = `${(-0.02 * size).toFixed(1)}px`;
+      let cx = COL;
+      for (const [s, cor] of segs) {
+        ctx.fillStyle = h.cor === WHITE ? WHITE : cor;
+        ctx.fillText(s, cx, base + size * 0.5 * (1 - e) - lh * 1.05 * x);
+        cx += ctx.measureText(s).width;
+      }
+      ctx.restore();
+    });
+  }
+}
+// o array de segmentos [[texto, cor], ...] vira o campo txt
+TITULOS.forEach((h) => { h.linhas = h.linhas.map((ln) => (Array.isArray(ln) ? { txt: ln } : ln)); });
+
+// ---------------------------------------------------------------- logo e botão final
+function marca(t) {
+  const t0 = TB(LOGO_AT) + 0.2;
+  if (t < t0) return;
+  // o logo entra inteiro, de 96% a 100% e opacidade (regra do guia); no botão, sobe para abrir espaço
+  const e = easeOut(prog(t, t0, t0 + 0.65)), w = 960 * (0.96 + 0.04 * e), h = (w * 356) / 800;
+  const cy = track(t, 540, [[TB(BOTAO_AT), 452]]);
+  ctx.save(); ctx.globalAlpha = e; ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(LOGO, 960 - w / 2, cy - h / 2, w, h); ctx.restore();
+  if (t < TB(BOTAO_AT)) return;
+  const s = step(t - TB(BOTAO_AT), 2.4) * (1 - 0.05 * Math.max(0, impulse(t - TB(42), 4)));
+  ctx.save(); ctx.translate(960, 856 + 30 * (1 - step(t - TB(BOTAO_AT), 2.4))); ctx.scale(s, s);
+  fillRR(-230, -56, 460, 112, 56, WHITE);
+  text('Crie sua conta', 0, 15, `700 40px ${SANS}`, OR, 'center');
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------- o cursor
+const BTN = [OX + 22, 540 + 182], KNOCK = [OX + 40, 370], SINO = [OX + 240, 540 + 98], X3 = [OX + 18, 540 + 124];
+const CAMPO = [OX + 250, 590], BOTAO = [1150, 892], INICIO = [1580, 930];
+const MOVES = [   // [batida em que sai, para onde]
+  [0, BTN, 2.4], [2, [1500, 850]], [3, BTN], [5, [1530, 880]], [8, KNOCK], [10, SINO], [12, X3], [14, [1560, 880]],
+  [20, [1640, 900]], [24, CAMPO], [26, [1600, 720]], [28, [1700, 860]], [36, [1520, 980]], [41, BOTAO],
+];
+function cursorPos(t) {
+  return [0, 1].map((k) => track(t, INICIO[k], MOVES.map(([n, p, f]) => [TB(n), p[k], f]), 1.8));
+}
+function drawCursor(t) {
+  const [x, y] = cursorPos(t);
+  const press = CLICKS.reduce((a, n) => a + Math.max(0, impulse(t - TB(n), 4)), 0);
+  const s = 1.9 * (1 - 0.18 * clamp(press));
+  ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
+  ctx.shadowColor = 'rgba(42,31,24,0.25)'; ctx.shadowBlur = 6; ctx.shadowOffsetY = 2;
+  ctx.beginPath();
+  [[0, 0], [0, 26], [6.5, 20], [10.5, 29.5], [14.5, 27.8], [10.6, 18.6], [18.5, 18.6]].forEach(([px, py], i) => (i ? ctx.lineTo(px, py) : ctx.moveTo(px, py)));
+  ctx.closePath(); ctx.fillStyle = INK; ctx.fill();
+  ctx.shadowColor = 'transparent'; ctx.lineWidth = 2.2; ctx.strokeStyle = WHITE; ctx.lineJoin = 'round'; ctx.stroke();
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------- a cena
+function drawScene(t) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.filter = 'none'; ctx.setLineDash([]);
+  ctx.fillStyle = mixHex(BG_DOR, BG_DEPOIS, step(t - TB(20), 2)); ctx.fillRect(0, 0, W, H);
+  const [jx, jy, jr] = camera(t);
+  ctx.translate(960 + jx, 540 + jy); ctx.rotate(jr); ctx.translate(-960, -540);
+
+  // o trilho tracejado por onde a caixa volta ao remetente
+  const trilho = easeOut(prog(t, TB(15), TB(15) + 0.5));
+  if (trilho > 0 && t < TB(20) + 0.6) {
+    ctx.save(); pen(LINE, 6); ctx.setLineDash([18, 16]);
+    path([[OX + 170, 690], [1890, 690]], trilho); ctx.restore();
+  }
+
+  const c = container(t);
+  const box = { x: c.cx - c.w / 2, y: c.cy - c.h / 2, w: c.w, h: c.h }, r = Math.max(0, Math.min(c.r, c.h / 2, c.w / 2));   // a mola passa um fio abaixo de zero ao virar cortina
+  ctx.save();
+  ctx.shadowColor = 'rgba(42,31,24,0.10)'; ctx.shadowBlur = 44; ctx.shadowOffsetY = 16;
+  ctx.beginPath(); ctx.roundRect(box.x, box.y, box.w, box.h, r); ctx.fillStyle = mixHex(WHITE, OR, c.fill); ctx.fill();
+  ctx.restore();
+  ctx.save();
+  ctx.beginPath(); ctx.roundRect(box.x, box.y, box.w, box.h, r); ctx.clip();
+  for (const st of STAGES) {
+    const t0 = TB(st.de < 0 ? 0 : st.de) + (st.de < 0 ? -1 : 0.12), tOut = TB(st.ate);
+    if (t < t0 || t > tOut + 0.14) continue;
+    const k = 1 - prog(t, tOut, tOut + 0.12);      // o conteúdo velho sai no começo da transformação
+    ctx.save();
+    ctx.globalAlpha = k;
+    // a caixa encolhe junto com o contêiner quando ele vai embora pelo trilho
+    const s = (st.escala ? Math.min(1, c.w / K.caixa.w) : 1) * (0.97 + 0.03 * k);
+    ctx.translate(c.cx, c.cy); ctx.scale(s, s);
+    st.fn(t, t0);
+    ctx.restore();
+  }
+  marca(t);
+  ctx.restore();
+
+  titulos(t);
+  drawCursor(t);
+}
+
+// ---------------------------------------------------------------- quadro: 4 subquadros misturados (desfoque de movimento)
+const main = document.getElementById('c').getContext('2d');
+const scratch = document.createElement('canvas'); scratch.width = W; scratch.height = H;
+const sctx = scratch.getContext('2d');
+function frame(t) {
+  for (let k = 0; k < SUB; k++) {
+    const ts = t + (k - (SUB - 1) / 2) / (FPS * SUB);
+    if (k === 0) { ctx = main; drawScene(ts); continue; }
+    ctx = sctx; drawScene(ts);
+    main.setTransform(1, 0, 0, 1, 0, 0); main.filter = 'none';
+    main.globalAlpha = 1 / (k + 1); main.drawImage(scratch, 0, 0); main.globalAlpha = 1;
+  }
+}
+window.seek = async (t) => { await assetsReady; frame(t); };
+
+// ---------------------------------------------------------------- deixas de som (cues.json): efeitos nos acertos medidos
+window.CUES = () => {
+  const pan = (x) => clamp((x - 960) / 1100, -0.8, 0.8);
+  const cues = [];
+  CLICKS.forEach((n) => cues.push({ t: hit(TB(n)), tipo: 'click', pan: pan(cursorPos(TB(n))[0]), rotulo: `clique na batida ${n}` }));
+  MORPH.forEach(([n, s]) => {
+    const antes = container(TB(n) - 0.001).cx;
+    cues.push({ t: hit(TB(n)), tipo: 'whoosh', ganho: s.fill ? 1.3 : 1, pan: pan(antes), panFim: pan(s.cx), rotulo: `transformação na batida ${n}` });
+  });
+  cues.push({ t: hit(TB(LOGO_AT)), tipo: 'thump', rotulo: 'logo' });
+  POPS.forEach((n) => cues.push({ t: hit(TB(n)), tipo: 'pop', pan: n === 40 ? 0 : 0.3, rotulo: `aparece na batida ${n}` }));
+  cues.forEach((c) => { c.t = Math.round(c.t * 10000) / 10000; c.pan = Math.round((c.pan || 0) * 100) / 100; if (c.panFim != null) c.panFim = Math.round(c.panFim * 100) / 100; });
+  return { duracao: DUR, bpm: BPM, cues: cues.sort((a, b) => a.t - b.t) };
+};
+
+// ---------------------------------------------------------------- trilha (sintetizada, 120 BPM, na mesma linha do tempo da imagem)
+// Mínima e limpa: relógio, bumbo, aro, shaker, grave, marimba e o "ding-dong" do interfone. Sem pad de fundo.
+const NOTE = (n) => 440 * 2 ** ((n - 69) / 12);
+window.renderAudio = async (sr) => {
+  const ac = new OfflineAudioContext(2, Math.ceil(DUR * sr), sr);
+  const rnd = mulberry32(0x808);
+  const noise = ac.createBuffer(1, sr * 2, sr);
+  { const d = noise.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = rnd() * 2 - 1; }
+  const comp = new DynamicsCompressorNode(ac, { threshold: -16, knee: 6, ratio: 2.5, attack: 0.005, release: 0.15 });
+  comp.connect(ac.destination);
+  const bus = new GainNode(ac, { gain: 0.7 }); bus.connect(comp);
+  const echo = new DelayNode(ac, { delayTime: E8 * 1.5, maxDelayTime: 1 });
+  const fb = new GainNode(ac, { gain: 0.22 }), wet = new GainNode(ac, { gain: 0.18 });
+  echo.connect(fb).connect(echo); echo.connect(wet).connect(bus);
+  const send = (node, pan = 0, fx = 0) => {
+    const p = new StereoPannerNode(ac, { pan }); node.connect(p).connect(bus);
+    if (fx) p.connect(new GainNode(ac, { gain: fx })).connect(echo);
+  };
+  const env = (t, a, d, v) => {
+    const g = new GainNode(ac, { gain: 0 });
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v, t + a); g.gain.exponentialRampToValueAtTime(1e-4, t + a + d);
+    return g;
+  };
+  const noiseAt = (t, d) => { const s = new AudioBufferSourceNode(ac, { buffer: noise }); s.start(t, (t * 0.37) % 1.5); s.stop(t + d); return s; };
+  const osc = (type, f, t, d) => { const o = new OscillatorNode(ac, { type, frequency: f }); o.start(t); o.stop(t + d); return o; };
+  const filt = (type, frequency, q = 1) => new BiquadFilterNode(ac, { type, frequency, Q: q });
+
+  const kick = (t, v = 0.8) => { const o = osc('sine', 140, t, 0.45); o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(44, t + 0.11); const g = env(t, 0.002, 0.36, v); o.connect(g); send(g); };
+  const tick = (t, v = 0.04) => { const g = env(t, 0.0008, 0.016, v); noiseAt(t, 0.03).connect(filt('bandpass', 3400, 5)).connect(g); send(g, 0.18); const o = osc('sine', 1900, t, 0.03), g2 = env(t, 0.0008, 0.012, v * 0.6); o.connect(g2); send(g2, 0.18); };
+  const shaker = (t, v = 0.03) => { const g = env(t, 0.008, 0.035, v); noiseAt(t, 0.06).connect(filt('highpass', 7000)).connect(g); send(g, -0.2); };
+  const rim = (t, v = 0.1) => { const g = env(t, 0.0008, 0.03, v); noiseAt(t, 0.04).connect(filt('bandpass', 1700, 3)).connect(g); send(g, -0.1, 0.1); const o = osc('triangle', 420, t, 0.04), g2 = env(t, 0.0008, 0.025, v * 0.7); o.connect(g2); send(g2, -0.1); };
+  const clap = (t, v = 0.1) => {
+    const g = new GainNode(ac, { gain: 0 });
+    for (const o of [0, 0.011, 0.022]) { g.gain.setValueAtTime(v, t + o); g.gain.exponentialRampToValueAtTime(v * 0.25, t + o + 0.008); }
+    g.gain.setValueAtTime(v * 0.7, t + 0.03); g.gain.exponentialRampToValueAtTime(1e-4, t + 0.18);
+    noiseAt(t, 0.22).connect(filt('bandpass', 1500, 0.9)).connect(g); send(g, 0.1, 0.12);
+  };
+  const sub = (t, n, d, v = 0.26) => {
+    const g = new GainNode(ac, { gain: 0 });
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v, t + 0.012); g.gain.setTargetAtTime(v * 0.55, t + 0.05, 0.25); g.gain.setTargetAtTime(0, t + d - 0.08, 0.03);
+    const o = osc('sine', NOTE(n), t, d + 0.3), o2 = osc('triangle', NOTE(n), t, d + 0.3);
+    const lp = filt('lowpass', 320); o2.connect(lp).connect(g); o.connect(g); send(g);
+  };
+  const marimba = (t, n, v = 0.1, d = 0.6, pan = 0, fx = 0.15) => {
+    const f = NOTE(n);
+    [[1, 1, d], [4, 0.22, d * 0.22], [9.9, 0.06, 0.04]].forEach(([m, a, dd]) => {
+      const o = osc('sine', f * m, t, dd + 0.05), g = env(t, 0.0015, dd, v * a); o.connect(g); send(g, pan, fx);
+    });
+  };
+  /** Carrilhão de interfone: parciais de sino, ataque curto, cauda longa. */
+  const bell = (t, n, v = 0.12, d = 1.4, pan = 0) => {
+    const f = NOTE(n);
+    [[1, 1, d], [2, 0.32, d * 0.6], [3.01, 0.16, d * 0.35], [4.16, 0.07, d * 0.2]].forEach(([m, a, dd]) => {
+      const o = osc('sine', f * m, t, dd + 0.05), g = env(t, 0.002, dd, v * a); o.connect(g); send(g, pan, 0.22);
+    });
+  };
+  const T = (n) => n * BEAT;   // a trilha define a grade (teórica); a imagem segue a grade medida dela
+
+  // compassos 1-2 (b0-b7): a dor. O relógio, o grave em lá, e o interfone tocando duas vezes sem resposta
+  for (let n = 0; n < 8; n++) tick(T(n), n % 4 ? 0.035 : 0.05);
+  kick(T(0), 0.7); kick(T(4), 0.6);
+  sub(T(0), 33, 3.9, 0.26); sub(T(4), 33, 3.9, 0.24);
+  marimba(T(0), 57, 0.07, 1.2); marimba(T(0), 64, 0.05, 1.2);
+  bell(T(1), 76, 0.16); bell(T(2), 72, 0.15);          // ding... dong
+  bell(T(4), 76, 0.1); bell(T(5), 72, 0.09);           // de novo, mais fraco
+  // compassos 3-4 (b8-b15): a tensão. Cada porta fechada ganha uma nota que desce
+  for (let n = 8; n < 16; n++) { tick(T(n), 0.035); shaker(T(n) + E8, 0.025); }
+  [8, 12].forEach((n) => kick(T(n), 0.75)); [10, 14].forEach((n) => kick(T(n), 0.55));
+  [[8, 29], [10, 38], [12, 38], [14, 28]].forEach(([n, b]) => sub(T(n), b, 0.95, 0.24));
+  [[8, [69, 72]], [10, [65, 69]], [12, [62, 65]], [14, [59, 64, 68]]].forEach(([n, ns]) => ns.forEach((m) => marimba(T(n), m, 0.07, 0.7)));
+  [9, 11, 13].forEach((n) => rim(T(n), 0.08));
+  // compasso 5 (b16-b19): a queda, "De novo.". Só o grave em mi e o relógio; uma virada de aro leva à virada
+  kick(T(16), 0.7); sub(T(16), 28, 3.6, 0.3);
+  marimba(T(16), 64, 0.08, 0.9); marimba(T(17), 59, 0.07, 0.9);
+  for (let n = 16; n < 19; n++) tick(T(n), 0.03);
+  for (let i = 0; i < 4; i++) rim(T(19) + (i * BEAT) / 4, 0.05 + i * 0.025);
+  // compassos 6-9 (b20-b35): a virada, em dó maior, groove leve
+  const HARM = { 5: [36, [72, 76, 79]], 6: [31, [71, 74, 79]], 7: [33, [69, 72, 76]], 8: [29, [69, 72, 77]] };
+  const ARP = [0, 1, 2, 1, 0, 2, 1, 2];
+  for (let bar = 5; bar <= 8; bar++) {
+    const [root, tones] = HARM[bar], b0 = bar * 4;
+    kick(T(b0), bar === 5 ? 0.9 : 0.75); kick(T(b0 + 1.5), 0.45); kick(T(b0 + 2), 0.65);
+    clap(T(b0 + 1)); clap(T(b0 + 3));
+    for (let s = 0; s < 16; s++) shaker(T(b0) + (s * BEAT) / 4, s % 2 ? 0.016 : 0.028);
+    sub(T(b0), root, 1.4, 0.26); sub(T(b0 + 1.5), root, 0.4, 0.16); sub(T(b0 + 2), root + 7, 0.9, 0.2); sub(T(b0 + 3.5), root + 12, 0.4, 0.14);
+    for (let i = 0; i < 8; i++) marimba(T(b0) + i * E8, tones[ARP[i]], i % 2 ? 0.04 : 0.055, 0.45, i % 2 ? 0.25 : -0.25, 0.2);
+  }
+  [72, 76, 79].forEach((m) => marimba(T(20), m - 12, 0.08, 1.1));    // a cortina
+  bell(T(32), 72, 0.12, 1.2); bell(T(33), 76, 0.12, 1.4);            // o "ding-dong" volta subindo: chegou
+  // compasso 10 (b36-b39): o logo
+  kick(T(36), 0.95); sub(T(36), 24, 3.6, 0.34);
+  [60, 64, 67, 72].forEach((m, i) => marimba(T(36) + i * 0.045, m, 0.09, 1.3));
+  bell(T(36), 84, 0.06, 2);
+  kick(T(38), 0.6); clap(T(37), 0.08); clap(T(39), 0.08);
+  for (let s = 0; s < 8; s++) shaker(T(36) + s * E8, 0.02);
+  marimba(T(38), 76, 0.06, 0.6); marimba(T(38) + E8, 79, 0.05, 0.6);
+  // compasso 11 (b40-b43): o botão
+  kick(T(40), 0.85); sub(T(40), 36, 3.4, 0.28);
+  marimba(T(40), 79, 0.09, 0.9); marimba(T(40), 84, 0.07, 0.9);
+  for (let s = 0; s < 4; s++) shaker(T(40) + s * E8, 0.018);
+  kick(T(42), 0.6); marimba(T(42), 84, 0.1, 1.2); marimba(T(42), 88, 0.08, 1.4); bell(T(42), 72, 0.06, 1.6);
+  return ac.startRendering();
+};
+</script>
+</html>

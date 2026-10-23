@@ -1,0 +1,158 @@
+{
+  "duracao": 22,
+  "bpm": 120,
+  "cues": [
+    {
+      "t": 0.5093,
+      "tipo": "click",
+      "pan": 0.36,
+      "rotulo": "clique na batida 1"
+    },
+    {
+      "t": 2.0107,
+      "tipo": "click",
+      "pan": 0.36,
+      "rotulo": "clique na batida 4"
+    },
+    {
+      "t": 4.0107,
+      "tipo": "whoosh",
+      "ganho": 1,
+      "pan": 0.34,
+      "panFim": 0.34,
+      "rotulo": "transformação na batida 8"
+    },
+    {
+      "t": 4.512,
+      "tipo": "click",
+      "pan": 0.37,
+      "rotulo": "clique na batida 9"
+    },
+    {
+      "t": 5.0107,
+      "tipo": "whoosh",
+      "ganho": 1,
+      "pan": 0.34,
+      "panFim": 0.34,
+      "rotulo": "transformação na batida 10"
+    },
+    {
+      "t": 5.512,
+      "tipo": "click",
+      "pan": 0.56,
+      "rotulo": "clique na batida 11"
+    },
+    {
+      "t": 6.0107,
+      "tipo": "whoosh",
+      "ganho": 1,
+      "pan": 0.34,
+      "panFim": 0.34,
+      "rotulo": "transformação na batida 12"
+    },
+    {
+      "t": 6.512,
+      "tipo": "click",
+      "pan": 0.35,
+      "rotulo": "clique na batida 13"
+    },
+    {
+      "t": 7.0107,
+      "tipo": "whoosh",
+      "ganho": 1,
+      "pan": 0.34,
+      "panFim": 0.34,
+      "rotulo": "transformação na batida 14"
+    },
+    {
+      "t": 8.0107,
+      "tipo": "whoosh",
+      "ganho": 1,
+      "pan": 0.34,
+      "panFim": 0.71,
+      "rotulo": "transformação na batida 16"
+    },
+    {
+      "t": 10.0107,
+      "tipo": "whoosh",
+      "ganho": 1.3,
+      "pan": 0.71,
+      "panFim": 0,
+      "rotulo": "transformação na batida 20"
+    },
+    {
+      "t": 12.0107,
+      "tipo": "whoosh",
+      "ganho": 1,
+      "pan": 0,
+      "panFim": 0.34,
+      "rotulo": "transformação na batida 24"
+    },
+    {
+      "t": 12.512,
+      "tipo": "click",
+      "pan": 0.56,
+      "rotulo": "clique na batida 25"
+    },
+    {
+      "t": 14.0107,
+      "tipo": "whoosh",
+      "ganho": 1,
+      "pan": 0.34,
+      "panFim": 0.34,
+      "rotulo": "transformação na batida 28"
+    },
+    {
+      "t": 14.512,
+      "tipo": "pop",
+      "pan": 0.3,
+      "rotulo": "aparece na batida 29"
+    },
+    {
+      "t": 15.512,
+      "tipo": "pop",
+      "pan": 0.3,
+      "rotulo": "aparece na batida 31"
+    },
+    {
+      "t": 16.0107,
+      "tipo": "whoosh",
+      "ganho": 1,
+      "pan": 0.34,
+      "panFim": 0.34,
+      "rotulo": "transformação na batida 32"
+    },
+    {
+      "t": 16.0107,
+      "tipo": "pop",
+      "pan": 0.3,
+      "rotulo": "aparece na batida 32"
+    },
+    {
+      "t": 18.0107,
+      "tipo": "whoosh",
+      "ganho": 1.3,
+      "pan": 0.34,
+      "panFim": 0,
+      "rotulo": "transformação na batida 36"
+    },
+    {
+      "t": 18.0107,
+      "tipo": "thump",
+      "rotulo": "logo",
+      "pan": 0
+    },
+    {
+      "t": 20.0107,
+      "tipo": "pop",
+      "pan": 0,
+      "rotulo": "aparece na batida 40"
+    },
+    {
+      "t": 21.0107,
+      "tipo": "click",
+      "pan": 0.17,
+      "rotulo": "clique na batida 42"
+    }
+  ]
+}

@@ -53,6 +53,17 @@ Os comandos fazem, na ordem:
 7. animático em 960×540;
 8. render final, com música e efeitos mixados.
 
+## A skill motion-reel
+
+Tudo o que o estúdio faz está empacotado como skill do Claude Code em [.claude/skills/motion-reel](.claude/skills/motion-reel/SKILL.md). Ela é acionada por pedidos de vídeo de lançamento, showreel, reel de produto, explicativo animado ou anúncio em motion.
+
+A pasta tem:
+- o `render.mjs` e as molas (`lib/motion.js`);
+- um modelo de filme genérico nos três formatos, com motor, ficha, trilha sintetizada e um capítulo de exemplo com loop exato;
+- os scripts: `capturar.mjs`, `beats.py`, `sfx.mjs`, `folha.py` e `critica.py`;
+- o prompt de crítica (`prompts/critica.txt`);
+- as regras e modelos de documentos (`referencia/`).
+
 ## Ferramentas
 
 | Arquivo | Para quê |

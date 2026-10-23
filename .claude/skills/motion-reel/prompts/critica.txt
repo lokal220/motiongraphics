@@ -1,0 +1,76 @@
+PROMPT DE CRÍTICA (skill motion-reel)
+=====================================
+
+Duas passadas usam este prompt:
+  A. Crítica de plano: durante a construção, plano a plano. É o que cada animador (ou subagente) roda.
+  B. Crítica de diretor: no filme renderizado inteiro, antes da entrega.
+O registro de cada rodada vai para docs/registro-de-critica.md (e docs/critica/capN.md na passada A).
+
+
+A. CRÍTICA DE PLANO (no mínimo 3 rodadas por plano, mesmo que a primeira já passe)
+-------------------------------------------------------------------------------
+1. Renderize de 3 a 5 quadros do plano (os tempos "chave" dele):
+     node render.mjs filmes/<filme>/index.html --frames 1.2,1.8,2.4 --param guia=1 --param sub=1
+     python scripts/folha.py .render-tmp/<filme>/rodadaN.png <os PNG>          (folha)
+     python scripts/folha.py .render-tmp/<filme>/rodadaN-cel.png <os PNG> --celular   (360 px)
+   Para movimento e sincronia, faça também uma tira de 6 a 10 quadros a cada 0,05 a 0,1 s em volta de cada
+   transformação e de cada clique.
+2. ABRA as imagens e olhe de verdade, também a versão de celular.
+3. Dê nota de 1 a 10:
+     gancho · leitura a 360 px · movimento · composição · profundidade · sincronia do som · acabamento
+4. Escreva os 3 maiores problemas, com o tempo exato, e corrija os 3.
+5. Repita até toda nota ser 8 ou mais. Formato do registro:
+
+   ## P03: <nome do plano>
+   ### Rodada 1
+   | gancho | leitura 360 | movimento | composição | profundidade | sincronia | acabamento |
+   |---|---|---|---|---|---|---|
+   | 7 | 6 | 7 | 8 | 6 | 8 | 7 |
+   Problemas: 1) ... (12,4 s) 2) ... 3) ...
+   Correções: ...
+
+
+B. CRÍTICA DE DIRETOR (no filme inteiro; repita até toda nota ser 8 ou mais)
+---------------------------------------------------------------------------
+Seja um diretor de motion exigente, não um autor orgulhoso.
+
+1. Gere os três materiais do último vídeo e ABRA os três. Olhe de verdade:
+     python scripts/critica.py out/final.mp4 out/critica/r0 --beats filmes/<filme>/beats.json
+   - folha-2qps.png: a folha de contato, com 2 quadros por segundo
+   - tira-12q.png: 12 quadros seguidos em volta da ação mais rápida
+   - celular-360-parte*.png e celular-360.mp4: o teste de celular, a 360 px de largura
+   - movimento.txt: batidas mais paradas, trechos de 0,5 s sem mudança e a ação mais rápida
+   Abra também recortes em tamanho real onde houver texto pequeno ou interface ampliada.
+
+2. Dê nota de 1 a 10:
+   - gancho nos 2 primeiros segundos
+   - leitura em tela de celular
+   - qualidade do movimento (molas, nenhum quadro morto)
+   - variedade (coisa nova a cada 2 a 4 s)
+   - composição
+   - fidelidade à marca
+   - sincronia do som
+
+3. Liste os 3 maiores problemas com o tempo exato. Procure especificamente por:
+   - texto se sobrepondo nas trocas (inclusive o rastro do desfoque de movimento em movimento rápido)
+   - qualquer coisa deslizando em velocidade constante em vez de acelerar e frear
+   - etiquetas nos cantos e molduras
+   - planos centralizados em gradiente
+   - texto borrado por escala (captura pequena ampliada demais: peça o print em alta)
+   - uma batida morta sem nada acontecendo (movimento.txt aponta as candidatas)
+   - um tranco na emenda do loop: o estado em t = duração tem que ser idêntico ao de t = 0; compare
+       node render.mjs filmes/<filme>/index.html --frames 0,<duração>
+       python scripts/folha.py --compara .render-tmp/<filme>/t00.00.png .render-tmp/<filme>/t<duração>.png
+   - fade fazendo o trabalho de uma transição (troca de cor passando pela cor intermediária: use cortina)
+   - cursor cobrindo o texto que muda
+
+4. Corrija e renderize de novo só os segundos afetados (render.mjs --frames nos tempos da folha). Remonte a folha
+   trocando só esses quadros, olhe de novo e mostre ao usuário a folha nova e as notas numa tabela por rodada:
+
+   | Rodada | gancho | leitura no celular | movimento | variedade | composição | marca | sincronia |
+   |---|---|---|---|---|---|---|---|
+   | R0 | 7 | 7 | 7 | 9 | 7 | 8 | 8 |
+   | R1 | ... |
+
+5. Repita até toda nota ser 8 ou mais. Só então faça o render completo da versão final, confira de novo
+   (codec, CRF 16, -14 LUFS, loop) e entregue.

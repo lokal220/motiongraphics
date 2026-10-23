@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<title>09 - diretor (Vai de Lokal, 45 s)</title>
+<!--
+  O motor do filme 09-diretor. Cada capítulo (capitulos/capN.js) registra os seus planos com F.registra({...});
+  este arquivo junta tudo numa linha do tempo só e desenha o quadro do instante t (window.seek). Regras de
+  programação dos capítulos: docs/GUIA-DE-ANIMACAO.md. Planos: docs/lista-de-planos.md.
+
+  Parâmetros (render.mjs --param chave=valor):
+    res=540   animático em 960x540 (desenha tudo no espaço 1920x1080 e reduz)
+    sub=1     sem desfoque de movimento (1 subquadro por quadro; o padrão é 4)
+    guia=1    desenha a área de leitura e o número do plano (só para revisão; nunca no render final)
+  Fluxo de som:
+    node render.mjs filmes/09-diretor/index.html --som --out filmes/09-diretor/audio/music.wav
+    python scripts/beats.py filmes/09-diretor/audio/music.wav filmes/09-diretor/beats.json
+    node render.mjs filmes/09-diretor/index.html --cues filmes/09-diretor/cues.json
+    node scripts/sfx.mjs filmes/09-diretor/cues.json filmes/09-diretor/audio/sfx.wav
+-->
+<style>
+  @font-face { font-family: 'DM Sans'; src: url('../../assets/fonts/DMSans-variavel-latin.woff2') format('woff2'); font-weight: 100 1000; }
+  @font-face { font-family: 'DM Mono'; src: url('../../assets/fonts/DMMono-500-latin.woff2') format('woff2'); font-weight: 500; }
+  html, body { margin: 0; background: #ECE7E1; }
+  canvas { display: block; }
+</style>
+<canvas id="c"></canvas>
+<script src="../../lib/motion.js"></script>
+<script src="beats.js" onerror="void 0"></script>
+<script>
+'use strict';
+// ---------------------------------------------------------------- tempo, formato e grade medida
+(function () {
+  const q = new URLSearchParams(location.search);
+  const RES = Number(q.get('res')) || 1080;
+  const BPM = 120, BEAT = 60 / BPM, BATIDAS = 90, DUR = BATIDAS * BEAT;   // 45 s
+  const S = RES / 1080;
+  const W = Math.round(1920 * S), H = Math.round(1080 * S);
+  window.FILM = { width: W, height: H, fps: 60, duration: DUR };
+
+  const MED = window.BEATS && window.BEATS.beats && window.BEATS.beats.length >= BATIDAS ? window.BEATS : null;
+  const GRID = MED ? MED.beats : Array.from({ length: BATIDAS }, (_, i) => i * BEAT);
+  const DOWN = MED && MED.downbeats ? MED.downbeats : GRID.filter((_, i) => i % 4 === 0);
+  const HITS = MED && MED.hits ? MED.hits : GRID;
+  const PERIOD = (GRID[GRID.length - 1] - GRID[0]) / (GRID.length - 1);
+  const at = (k) => (k < GRID.length ? GRID[k] : GRID[GRID.length - 1] + (k - GRID.length + 1) * PERIOD);
+  /** Tempo da batida n (aceita frações). Nos tempos fortes (múltiplos de 4) usa a lista medida deles. */
+  function TB(n) {
+    if (Number.isInteger(n) && n % 4 === 0 && DOWN[n / 4] != null) return DOWN[n / 4];
+    const i = Math.floor(n);
+    return at(i) + (n - i) * PERIOD;
+  }
+  /** O acerto medido mais perto de t (até 80 ms); os efeitos caem nele. */
+  function hit(t) {
+    let best = t, d = 0.08;
+    for (const h of HITS) if (Math.abs(h - t) < d) { d = Math.abs(h - t); best = h; }
+    return best;
+  }
+
+  const cor = {
+    INK: '#2A1F18', INK2: '#6B5C4E', LINE: '#CFC6BD', LIGHT: '#F1EDE9', ROAD: '#EEE9E3', MUTED: '#B5AA9F',
+    OR: '#EA6E1A', OR_ESCURO: '#C05810', PESSEGO: '#FFF0E8', WHITE: '#FFFFFF', VERDE: '#137456',
+    BG_ANTES: '#ECE7E1', BG_DEPOIS: '#F5F3F0',
+  };
+  const fonte = { SANS: '"DM Sans"', MONO: '"DM Mono"' };
+  const tam = { LEG: 84, UI: 68, MONO: 64, ASS: 96, TRACO: 6 };
+  const VIRADA = 44;   // a batida da virada: some a câmera na mão e as faixas, entra o laranja
+  const RETORNO = 88;  // a volta ao começo (loop): faixas, câmera na mão e fundo do "antes" voltam até o último quadro
+
+  window.F = {
+    W, H, S, BPM, BEAT, DUR, BATIDAS, VIRADA, RETORNO, TB, hit, cor, fonte, tam, M: window.Motion,
+    q, guia: q.get('guia') === '1', SUB: Number(q.get('sub')) || 4,
+    capitulos: [], img: {},
+    /** Cada capítulo chama F.registra({...}) (ver docs/GUIA-DE-ANIMACAO.md). */
+    registra(cap) { this.capitulos.push(cap); },
+  };
+})();
+</script>
+<script src="trilha.js"></script>
+<script src="capitulos/cap1.js"></script>
+<script src="capitulos/cap2.js"></script>
+<script src="capitulos/cap3.js"></script>
+<script src="capitulos/cap4.js"></script>
+<script>
+'use strict';
+(function () {
+  const { TB, hit, cor, fonte, tam, M, VIRADA, RETORNO } = F;
+  const { step, impulse, track, clamp, prog, lerp, easeOut, easeIn, mixHex } = M;
+
+  // ---------------------------------------------------------------- junta os capítulos
+  const caps = F.capitulos;
+  const ESTADOS = Object.assign({}, ...caps.map((c) => c.estados || {}));
+  const estado = (s) => (typeof s === 'string' ? ESTADOS[s] : s);
+  const INICIAL = estado(caps[0] && caps[0].inicial);   // o primeiro quadro (e o último, no loop)
+  const MORPHS = caps.flatMap((c) => c.morphs || []).map(([n, s, f]) => [n, estado(s), f]).sort((a, z) => a[0] - z[0]);
+  const PLANOS = caps.flatMap((c) => c.planos || []).sort((a, z) => a.de - z.de);
+  const camadas = (k) => caps.flatMap((c) => (c[k] || []).map((x) => Object.assign({ cap: c }, x)));
+  const CONTEUDO = camadas('conteudo'), FUNDO = camadas('fundo'), FRENTE = camadas('frente'), LEGENDAS = camadas('legendas');
+  const CAMERA = caps.flatMap((c) => c.camera || []).sort((a, z) => a[0] - z[0]);
+  const MOVES = caps.flatMap((c) => (c.cursor && c.cursor.moves) || []).sort((a, z) => a[0] - z[0]);
+  const CLIQUES = caps.flatMap((c) => (c.cursor && c.cursor.cliques) || []).sort((a, z) => a - z);
+  const FORA = [2060, 1220];   // o cursor descansa fora do quadro (o gancho não tem cursor)
+  const ATIVOS = Object.assign({}, ...caps.map((c) => c.ativos || {}));
+
+  // ---------------------------------------------------------------- arquivos
+  const assetsReady = Promise.all(Object.entries(ATIVOS).map(([nome, src]) => new Promise((res, rej) => {
+    const im = new Image();
+    im.onload = () => res();
+    im.onerror = () => rej(new Error(`não carregou ${nome} (${src})`));
+    im.src = src;
+    F.img[nome] = im;
+  })).concat([
+    document.fonts.load(`800 ${tam.LEG}px ${fonte.SANS}`), document.fonts.load(`700 ${tam.UI}px ${fonte.SANS}`),
+    document.fonts.load(`500 ${tam.UI}px ${fonte.SANS}`), document.fonts.load(`500 ${tam.MONO}px ${fonte.MONO}`),
+  ]));
+
+  // ---------------------------------------------------------------- o contêiner
+  function container(t) {
+    const out = {};
+    if (!INICIAL) return { cx: 960, cy: 540, w: 0, h: 0, r: 0, fill: cor.WHITE, cor: 0 };
+    for (const k of ['cx', 'cy', 'w', 'h', 'r']) out[k] = track(t, INICIAL[k], MORPHS.map(([n, s, f]) => [TB(n), s[k], f]));
+    // cor: 0 branco, 1 laranja (a cor vira rápido, sem tempo no pêssego); sombra: 1 normal, 0 sem
+    out.cor = track(t, INICIAL.cor || 0, MORPHS.map(([n, s]) => [TB(n), s.cor || 0]), 5);
+    out.sombra = track(t, INICIAL.sombra ?? 1, MORPHS.map(([n, s]) => [TB(n), s.sombra ?? 1]), 3);
+    out.r = Math.max(0, Math.min(out.r, out.w / 2, out.h / 2));
+    out.box = { x: out.cx - out.w / 2, y: out.cy - out.h / 2, w: out.w, h: out.h };
+    return out;
+  }
+  F.container = container;
+
+  // ---------------------------------------------------------------- câmera
+  /** "Antes" (1) ou "depois" (0): vai a 0 na virada e volta a 1 no retorno, exato no último quadro (loop). */
+  const antes = (t, f = 1.6) => 1 - step(t - TB(VIRADA), f) + step(t - TB(RETORNO), 2.6);
+  F.antes = antes;
+  /** Câmera na mão no "antes" (soma de senos com período de 45 s: o último quadro treme igual ao primeiro)
+   *  e enquadramento por molas (camera dos capítulos). */
+  function camera(t) {
+    const z = track(t, 1, CAMERA.map(([n, v, f]) => [TB(n), v.z ?? 1, f]), 1.2);
+    const x = track(t, 960, CAMERA.map(([n, v, f]) => [TB(n), v.x ?? 960, f]), 1.2);
+    const y = track(t, 540, CAMERA.map(([n, v, f]) => [TB(n), v.y ?? 540, f]), 1.2);
+    const a = antes(t);
+    const s = (k, ph) => Math.sin((2 * Math.PI * k * t) / F.DUR + ph);   // k ciclos por filme
+    const jx = a * 5 * (s(14, 1.3) + 0.6 * s(33, 4.1) + 0.3 * s(62, 2.2));
+    const jy = a * 4 * (s(12, 0.4) + 0.6 * s(36, 3.3) + 0.3 * s(68, 5.6));
+    const jr = a * 0.0018 * (s(10, 2.7) + 0.5 * s(30, 0.9));
+    return { z, x, y, jx, jy, jr };
+  }
+  F.camera = camera;
+  /** Faixas de cinema (132/114 px na referência; aqui 120/150 para a legenda de 84 px caber embaixo). */
+  function faixas(t) { const a = antes(t, 1.4); return [120 * a, 150 * a]; }
+  F.faixas = faixas;
+
+  // ---------------------------------------------------------------- ajudantes de desenho (usados pelos capítulos)
+  let ctx;
+  const api = {
+    get ctx() { return ctx; },
+    pen(color, width = tam.TRACO) { ctx.strokeStyle = color; ctx.lineWidth = width; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; },
+    path(pts, p = 1, closed = false) { M.path(ctx, pts, p, closed); },
+    fill(x, y, w, h, r, color) { ctx.beginPath(); ctx.roundRect(x, y, w, h, Math.max(0, r)); ctx.fillStyle = color; ctx.fill(); },
+    texto(s, x, y, size, opts = {}) {
+      const { peso = 800, cor: c = cor.INK, alinha = 'left', mono = false, espaco = mono ? '0px' : `${(-0.02 * size).toFixed(1)}px` } = opts;
+      ctx.font = `${mono ? 500 : peso} ${size}px ${mono ? fonte.MONO : fonte.SANS}`; ctx.fillStyle = c; ctx.textAlign = alinha;
+      if ('letterSpacing' in ctx) ctx.letterSpacing = espaco;
+      ctx.fillText(s, x, y);
+      return ctx.measureText(s).width;
+    },
+    /** Texto que entra subindo por dentro de uma máscara em t0 e sai subindo em t1 (sem fade). */
+    sobe(t, t0, t1, s, x, y, size, opts = {}) {
+      const ein = easeOut(prog(t, t0, t0 + 0.5)), eout = t1 == null ? 0 : easeIn(prog(t, t1, t1 + 0.24));
+      if (ein <= 0 || eout >= 1) return;
+      const { alinha = 'left' } = opts, lh = size * 1.2;
+      ctx.save();
+      ctx.beginPath();
+      const x0 = alinha === 'center' ? x - 1200 : alinha === 'right' ? x - 2400 : x - 20;
+      ctx.rect(x0, y - size * 0.95, 2420, lh);
+      ctx.clip();
+      // na saída sobe uma linha e mais 0,3 do corpo: as pernas (p, q, g) somem inteiras pela boca da máscara
+      api.texto(s, x, y + size * 0.55 * (1 - ein) - (lh + 0.3 * size) * eout, size, opts);
+      ctx.restore();
+    },
+    img(nome, x, y, w, crop) {
+      const im = F.img[nome];
+      if (!im) throw new Error(`imagem não registrada: ${nome}`);
+      const [sx, sy, sw, sh] = crop || [0, 0, im.width, im.height], h = (w * sh) / sw;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(im, sx, sy, sw, sh, x, y, w, h);
+      return h;
+    },
+    pin(x, y, s, color = cor.OR) {   // o pin do logo, com a ponta em (x, y)
+      ctx.save(); ctx.translate(x - 50 * s, y - 78 * s); ctx.scale(s, s);
+      ctx.fillStyle = color; ctx.fill(PIN, 'evenodd'); ctx.restore();
+    },
+    /** Progresso de entrada do elemento i de um conteúdo que começa em t0 (traços desenhando em cascata). */
+    entra(t, t0, i = 0, d = 0.45) { return easeOut(prog(t, t0 + i * 0.05, t0 + i * 0.05 + d)); },
+  };
+  const PIN = new Path2D('M50 22c-10 0-18 8-18 18 0 13 18 38 18 38s18-25 18-38c0-10-8-18-18-18zm0 25a7 7 0 1 1 0-14 7 7 0 0 1 0 14z');
+  F.api = api;
+
+  // ---------------------------------------------------------------- legendas (espaço de tela)
+  function legendas(t) {
+    const [, baixo] = faixas(t);
+    for (const L of LEGENDAS) {
+      const t0 = TB(L.de) + (L.atraso ?? 0.08), t1 = TB(L.ate) - 0.26;
+      if (t < t0 || t > t1 + 0.3) continue;
+      const linhas = L.linhas.map((l) => (typeof l === 'string' ? { txt: l } : l));
+      const size = L.estilo === 'grande' ? tam.ASS : tam.LEG, lh = Math.round(size * 1.14);
+      if (L.estilo === 'faixa') {
+        // texto branco na faixa de cinema de baixo, alinhado à coluna da esquerda
+        linhas.forEach((l, i) => api.sobe(t, l.em != null ? TB(l.em) + 0.08 : t0 + i * 0.07, t1, l.txt, 150, 1080 - baixo + size * 0.98, size * 0.86, { cor: cor.WHITE }));
+      } else if (L.estilo === 'pilula') {
+        // pílula de tinta com texto branco, embaixo e à esquerda, na largura da frase (a pílula da referência)
+        ctx.font = `800 ${size}px ${fonte.SANS}`;
+        if ('letterSpacing' in ctx) ctx.letterSpacing = `${(-0.02 * size).toFixed(1)}px`;
+        const largura = Math.max(...linhas.map((l) => ctx.measureText(l.txt).width));
+        const e = easeOut(prog(t, t0 - 0.06, t0 + 0.4)), ex = easeIn(prog(t, t1, t1 + 0.24));
+        const ph = linhas.length * lh + 44, py = 1000 - ph;
+        ctx.save(); ctx.globalAlpha = 1 - ex;
+        api.fill(120, py + 30 * (1 - e) , (largura + 72) * (0.6 + 0.4 * e), ph, 36, cor.INK);
+        ctx.restore();
+        linhas.forEach((l, i) => api.sobe(t, l.em != null ? TB(l.em) + 0.08 : t0 + 0.08 + i * 0.07, t1, l.txt, 156, py + 22 + (i + 1) * lh - size * 0.24, size, { cor: cor.WHITE }));
+      } else {
+        // 'grande': o título da virada, na coluna da esquerda, centrado na altura
+        const top = 540 - (linhas.length * lh) / 2;
+        linhas.forEach((l, i) => {
+          const segs = Array.isArray(l.txt) ? l.txt : [[l.txt, l.cor || L.cor || cor.INK]];
+          let x = 150;
+          const ti = l.em != null ? TB(l.em) + 0.08 : t0 + i * 0.07;
+          for (const [s, c] of segs) {
+            api.sobe(t, ti, t1, s, x, top + (i + 1) * lh - size * 0.26, size, { cor: c });
+            ctx.font = `800 ${size}px ${fonte.SANS}`;
+            x += ctx.measureText(s).width;
+          }
+        });
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------- cursor (no espaço da cena: acompanha a câmera)
+  function cursorPos(t) { return [0, 1].map((k) => track(t, FORA[k], MOVES.map(([n, p, f]) => [TB(n), p[k], f]), 1.8)); }
+  F.cursorPos = cursorPos;
+  function drawCursor(t) {
+    const [x, y] = cursorPos(t);
+    if (x > 2040 || y > 1200) return;
+    const press = CLIQUES.reduce((a, n) => a + Math.max(0, impulse(t - TB(n), 4)), 0);
+    const s = 1.9 * (1 - 0.18 * clamp(press));
+    ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
+    ctx.shadowColor = 'rgba(42,31,24,0.25)'; ctx.shadowBlur = 6; ctx.shadowOffsetY = 2;
+    ctx.beginPath();
+    [[0, 0], [0, 26], [6.5, 20], [10.5, 29.5], [14.5, 27.8], [10.6, 18.6], [18.5, 18.6]].forEach(([px, py], i) => (i ? ctx.lineTo(px, py) : ctx.moveTo(px, py)));
+    ctx.closePath(); ctx.fillStyle = cor.INK; ctx.fill();
+    ctx.shadowColor = 'transparent'; ctx.lineWidth = 2.2; ctx.strokeStyle = cor.WHITE; ctx.lineJoin = 'round'; ctx.stroke();
+    ctx.restore();
+  }
+
+  // ---------------------------------------------------------------- a cena
+  function camada(lista, t, c) {
+    for (const L of lista) {
+      const t0 = TB(L.de) + (L.atraso ?? 0), t1 = TB(L.ate);
+      if (t < t0 - 0.0001 || t > t1 + 0.14) continue;
+      const k = L.saida === false ? 1 : 1 - prog(t, t1, t1 + 0.12);
+      ctx.save(); ctx.globalAlpha *= k;
+      L.desenha(ctx, t, Object.assign(Object.create(api), { t0, t1, k, c, F }));
+      ctx.restore();
+    }
+  }
+  function drawScene(t) {
+    ctx.setTransform(F.S, 0, 0, F.S, 0, 0); ctx.globalAlpha = 1; ctx.filter = 'none'; ctx.setLineDash([]);
+    ctx.fillStyle = mixHex(cor.BG_DEPOIS, cor.BG_ANTES, antes(t)); ctx.fillRect(0, 0, 1920, 1080);
+    const cam = camera(t);
+    ctx.save();
+    ctx.translate(960 + cam.jx, 540 + cam.jy); ctx.rotate(cam.jr); ctx.scale(cam.z, cam.z); ctx.translate(-cam.x, -cam.y);
+
+    const c = container(t);
+    camada(FUNDO, t, c);
+    if (c.w > 1 && c.h > 1) {
+      ctx.save();
+      if (c.sombra > 0.01) { ctx.shadowColor = `rgba(42,31,24,${(0.1 * c.sombra).toFixed(3)})`; ctx.shadowBlur = 44; ctx.shadowOffsetY = 16; }
+      ctx.beginPath(); ctx.roundRect(c.box.x, c.box.y, c.box.w, c.box.h, c.r); ctx.fillStyle = mixHex(cor.WHITE, cor.OR, c.cor); ctx.fill();
+      ctx.restore();
+      ctx.save();
+      ctx.beginPath(); ctx.roundRect(c.box.x, c.box.y, c.box.w, c.box.h, c.r); ctx.clip();
+      ctx.translate(c.cx, c.cy);
+      for (const L of CONTEUDO) {
+        const t0 = TB(L.de) + (L.atraso ?? 0.12), t1 = TB(L.ate);
+        if (t < t0 - 0.0001 || t > t1 + 0.14) continue;
+        const k = L.saida === false ? 1 : 1 - prog(t, t1, t1 + 0.12);   // o conteúdo velho sai no começo da transformação
+        ctx.save(); ctx.globalAlpha *= k; const s = 0.97 + 0.03 * k; ctx.scale(s, s);
+        L.desenha(ctx, t, Object.assign(Object.create(api), { t0, t1, k, c, F }));
+        ctx.restore();
+      }
+      ctx.restore();
+    }
+    camada(FRENTE, t, c);
+    drawCursor(t);
+    ctx.restore();
+
+    // espaço de tela: faixas de cinema e legendas
+    const [cima, baixo] = faixas(t);
+    ctx.fillStyle = cor.INK;
+    if (cima > 0.5) ctx.fillRect(0, 0, 1920, cima);
+    if (baixo > 0.5) ctx.fillRect(0, 1080 - baixo, 1920, baixo);
+    legendas(t);
+    if (F.guia) guia(t);
+  }
+  /** Revisão: a área de leitura a 360 px e o plano atual (nunca no render final). */
+  function guia(t) {
+    const p = PLANOS.filter((x) => t >= TB(x.de) && t < TB(x.ate)).pop();
+    ctx.save(); ctx.globalAlpha = 0.9; ctx.fillStyle = '#000'; ctx.fillRect(0, 0, 330, 54);
+    ctx.font = `700 30px ${fonte.MONO}`; ctx.fillStyle = '#fff'; ctx.textAlign = 'left';
+    ctx.fillText(`${p ? p.id : '--'}  ${t.toFixed(2)} s`, 14, 38); ctx.restore();
+  }
+
+  // ---------------------------------------------------------------- quadro: subquadros misturados (desfoque de movimento)
+  const canvas = document.getElementById('c');
+  canvas.width = F.W; canvas.height = F.H;
+  const main = canvas.getContext('2d');
+  const scratch = document.createElement('canvas'); scratch.width = F.W; scratch.height = F.H;
+  const sctx = scratch.getContext('2d');
+  function frame(t) {
+    const SUB = F.SUB;
+    for (let k = 0; k < SUB; k++) {
+      const ts = t + (k - (SUB - 1) / 2) / (60 * SUB);
+      if (k === 0) { ctx = main; drawScene(ts); continue; }
+      ctx = sctx; drawScene(ts);
+      main.setTransform(1, 0, 0, 1, 0, 0); main.filter = 'none';
+      main.globalAlpha = 1 / (k + 1); main.drawImage(scratch, 0, 0); main.globalAlpha = 1;
+    }
+  }
+  window.seek = async (t) => { await assetsReady; frame(t); };
+
+  // ---------------------------------------------------------------- deixas de som (cues.json)
+  window.CUES = () => {
+    const pan = (x) => clamp((x - 960) / 1100, -0.8, 0.8);
+    const r2 = (v) => Math.round(v * 100) / 100;
+    const cues = [];
+    CLIQUES.forEach((n) => cues.push({ t: hit(TB(n)), tipo: 'click', pan: r2(pan(cursorPos(TB(n))[0])), rotulo: `clique (b${n})` }));
+    MORPHS.forEach(([n, s]) => {
+      if (s.whoosh === 0) return;   // troca escondida (só a cor, atrás de uma cortina): sem som
+      const antes = container(TB(n) - 0.001).cx;
+      cues.push({ t: hit(TB(n)), tipo: 'whoosh', ganho: s.whoosh ?? 1, pan: r2(pan(antes)), panFim: r2(pan(s.cx)), rotulo: `transformação (b${n})` });
+    });
+    for (const c of caps) for (const d of c.deixas || []) {
+      cues.push(Object.assign({ pan: 0 }, d, { t: hit(TB(d.beat)), rotulo: d.rotulo || `${d.tipo} (b${d.beat})` }));
+    }
+    cues.forEach((c) => { c.t = Math.round(c.t * 10000) / 10000; delete c.beat; });
+    return { duracao: F.DUR, bpm: F.BPM, cues: cues.sort((a, b) => a.t - b.t) };
+  };
+  window.PLANOS = PLANOS.map((p) => ({ id: p.id, de: TB(p.de), ate: TB(p.ate), chave: (p.chave || []).map(TB) }));
+})();
+</script>
+</html>

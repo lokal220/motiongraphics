@@ -1,137 +1,157 @@
-# Guia de estilo: a gramática da referência
+# Guia de estilo: 09-diretor (VAI DE LOKAL, 45 s)
 
-**Referência:** vídeo de lançamento de um app para Mac, publicado no X ([link](https://x.com/nerdynikhil/status/2112637201033138656)).
-Baixado em `refs/referencia.mp4`: 70,5 s, 1920×1080, 60 fps, com áudio. Há 141 quadros em `refs/frames/`, um a cada 0,5 s (`q000.jpg` = 0,0 s, `q001.jpg` = 0,5 s…).
+**O filme em uma linha:** uma pessoa que vive na correria nunca está em casa quando a entrega chega, não tem porteiro e vive pedindo favor, até passar a comprar com o endereço de uma agência parceira. A agência recebe por ela e avisa no WhatsApp. **Sentimento final: alívio e tranquilidade.**
 
-Este guia descreve **como** a referência conta, não **o que** ela conta. Não vamos usar nada do conteúdo dela: nem o computador antigo, nem o campo, nem o app, os ícones, os textos ou a marca. Os números marcados "medido" saíram dos quadros, com o ffmpeg ou analisando os pixels. Os marcados "estimado" vêm da observação.
+A frase do filme é "Compre onde quiser. A gente recebe pra você.", do site.
 
----
+Este guia diz **como** o filme conta. A lista de planos (`docs/lista-de-planos.md`) diz **o que** acontece em cada plano.
 
-## 1. Estrutura em atos
+## 0. De onde vem cada coisa
 
-| Ato | Tempo | Duração | O que acontece (a gramática) |
+| Entrada | Fonte | Regra |
+|---|---|---|
+| Gramática de montagem | `refs/` (a pasta não está vazia: é o vídeo de lançamento analisado no 05, em `docs/05-lancamento/guia-de-estilo.md`) e a seção 20 do guia, "Estilo de motion" | Pega a gramática, nunca o conteúdo |
+| Marca (tom, palavras, proibições, curvas) | Guia Mestre (artefato), seções 20, 22, 24, 26 e 28 | Só como informação |
+| Logo, cores, fontes, telas do app | Site vaidelokal.com.br (capturado com Playwright, `scripts/capturar_09.mjs`) e os prints reais do app que você mandou (`assets/09/app/`) | Nunca redesenhar interface |
+| Música e efeitos | Código (`renderAudio`, `scripts/sfx.mjs`), medidos com `scripts/beats.py` | Acertos na grade medida, -14 LUFS |
+
+**O que a referência ensina** (medido no 05):
+- O primeiro terço é emoção, em tom de cinema: faixas pretas, câmera empurrando devagar e o problema se acumulando em camadas.
+- A virada é uma superfície que se limpa, e o produto aparece num estúdio claro.
+- No estúdio, a interface real fica no centro e um destaque pula de elemento em elemento a cada verbo.
+- Tem uma pausa curta e isolada.
+- A assinatura tem o bloco da marca deslizando e uma lista rolando.
+- O problema e o produto se ligam por um movimento **para dentro de uma superfície**, nunca por corte seco.
+
+## 1. Estrutura (120 BPM, 90 batidas, 45 s)
+
+| Bloco | Tempo | Batidas | Peso | Na referência |
+|---|---|---|---|---|
+| Gancho | 0–2 s | 0–3 | 4% | o problema numa imagem |
+| Ato 1: a correria | 2–12 s | 4–23 | 22% | cinema, camadas acumulando |
+| Ato 2: os favores | 12–22 s | 24–43 | 22% | o peso chega ao máximo |
+| Ato 3: a virada | 22–32 s | 44–63 | 22% | a superfície limpa, o produto real |
+| Ato 4: a agência recebe | 32–40 s | 64–79 | 18% | o produto fechando o ciclo |
+| Fim | 40–45 s | 80–89 | 11% | assinatura + lista |
+
+- **45 s não fecham em compassos inteiros** (são 22 compassos e meio). Os dois últimos tempos viram a anacruse do loop: a música e a imagem do fim preparam o primeiro tempo forte do gancho.
+- Uma recompensa visual nova a cada 3 a 5 s, e alguma mudança a cada 2 s no máximo.
+
+## 2. Paleta
+
+| Papel | Cor | Onde |
+|---|---|---|
+| Fundo do "antes" (atos gancho–2) | `#ECE7E1` | neutro quente, um pouco mais escuro |
+| Fundo do "depois" (atos 3–fim) | `#F5F3F0` | o `--bg-2` do site: neutro quente, claro |
+| Superfície (contêiner, cartões) | `#FFFFFF` | "muito branco" |
+| Tinta | `#2A1F18` | texto, traço da ilustração, faixas de cinema, pílula de legenda |
+| Tinta 2 | `#6B5C4E` | texto secundário, a resposta que não ajuda |
+| Linha clara | `#CFC6BD` | ruas do mapa, divisórias, a casa esmaecida |
+| **Destaque: laranja** | `#EA6E1A` | **só depois da virada**: o pin, o anel que pula pela interface, a palavra-chave, a cartela final |
+| Verde | `#137456` / `#1D9E75` | só dentro das telas reais ("Pagamento confirmado", "Copiado"), nunca acrescentado |
+
+O "antes" não tem laranja nenhum. O laranja entra na virada e **aponta**: nunca é fundo de cena, exceto na cartela final.
+
+## 3. Tipografia (lida a 360 px de largura)
+
+A 360 px de largura, o quadro de 1920 encolhe 5,3 vezes. Um texto de 80 px em 1080p vira 15 px no celular, o mínimo confortável.
+
+| Uso | Fonte | Corpo a 1080p | No celular (360 px) |
 |---|---|---|---|
-| 1. O problema, em tom de cinema | 0,0–22,3 s | 22,3 s (32%) | Um único plano longo e contínuo: um objeto num cenário, a câmera empurrando devagar até a tela dele ocupar o quadro. Faixas pretas de cinema. A narração vira legenda. Dentro da tela, o problema se acumula em camadas (janelas se empilhando). |
-| Virada | 18,0–22,5 s | ≈ 4 s | As camadas do problema se dissolvem, a tela fica vazia e limpa, o ícone do produto aparece no centro e tudo estoura em claro. As faixas pretas somem. |
-| 2. O produto, em estúdio | 22,5–50,4 s | 27,9 s (40%) | O aparelho sobre fundo claro e liso. Na tela, a interface real, e um destaque que **pula de elemento em elemento** a cada verbo da narração. A câmera "respira" (aproxima e afasta de leve). |
-| Pausa | 50,4–52,8 s | 2,4 s (3%) | Corte seco para preto. Uma frase curta, palavra por palavra. É o único respiro do filme. |
-| 3. Fechamento do produto | 52,8–57,0 s | 4,2 s (6%) | De volta ao estúdio. Os elementos do mundo (arquivos) voam **para dentro** do aparelho. |
-| Assinatura | 57,0–70,5 s | 13,5 s (19%) | Ícone + nome + frase sobre fundo claro. O conjunto desliza para a esquerda e abre espaço para uma **lista de recursos rolando** de baixo para cima. O conjunto volta ao centro com a chamada e o endereço. Escurece no fim. |
+| Legenda e notificação (o texto que conta a história) | DM Sans 800, -0,02 em | **84 px** | 16 px |
+| Texto de interface desenhado (bolhas, títulos de notificação) | DM Sans 700/500 | **64–72 px** | 12–14 px |
+| ID e códigos (LOKAL12, CAIXA.482913) | DM Mono 500 | 64 px | 12 px |
+| Telas reais do app | a própria captura | **recortada e ampliada até o texto-chave ter 56 px ou mais** | ≥ 11 px |
+| Assinatura: "Chega de perder encomendas." | DM Sans 800, -0,03 em | 96 px | 18 px |
 
-**A regra por trás:** o primeiro terço é emoção (cinema, nostalgia, o problema), os dois terços seguintes são o produto mostrado de verdade, e o fim é a marca. O problema e o produto se ligam por um **movimento contínuo para dentro de uma tela**, não por um corte.
+- No máximo **dois tamanhos de texto por quadro**.
+- Frases curtas, uma ideia por plano. Cada texto fica na tela tempo de ser lido duas vezes.
 
-## 2. Paleta (hex)
+## 4. Ilustração (o "antes")
 
-### Na referência (medido, por agrupamento de cor nos quadros)
+Não há filmagem nem 3D da marca. O mundo da personagem é **ilustração de traço da marca**:
+- **Traço:** 6 px a 1080p (proporcional a 2 px numa tela de 390), pontas e cantos arredondados, em tinta.
+- **Como entra:** o traço se desenha. Nada entra por fade.
+- **A personagem nunca aparece de rosto.** Vemos a mão com o celular, o bolso, as costas na rua, a silhueta no metrô. Nada de mascote nem personagem fofo (regra do guia).
+- **Pacote:** caixa de papelão em linha, nunca com olhos ou braços. **Entregador, carro e caixa sem marca** de loja ou de transportadora.
+- **Celular:** moldura neutra, sem marca de fabricante.
+- **Mapa:** claro e simplificado, desenhado, com linha tracejada laranja. **Não usamos o Google Maps do site**: tem conteúdo de terceiros e foge da regra do guia.
 
-| Momento | Cores dominantes | Papel |
-|---|---|---|
-| Ato 1, cenário | `#EED3AD` (céu dourado, 27%), `#303411` e `#686232` (verdes), `#A88F56` (bege do objeto), `#668480` (névoa azulada) | Luz quente de fim de tarde, saturação baixa |
-| Ato 1, faixas | `#000000` (25% do quadro) | Faixas de cinema |
-| Tela vazia (virada) | `#DBFAF0`, `#CDEFE3`, `#B2E2D4` (ciano pálido), `#5E977B` | Uma única cor fria e clara ocupando tudo antes do produto |
-| Ato 2, estúdio | `#E1E5E9` (fundo), `#0F1210` (interface escura do produto) | Fundo frio e liso, sem textura |
-| Legenda em pílula | `#4B4C4F` (estimado, cinza grafite opaco) com texto branco | Legenda sobre fundo claro |
-| Pausa | `#000000` com texto `#FDFDFD` | Contraste máximo |
-| Assinatura | `#EDF1F4` (55%), `#F4F8F9`, `#FAFCFC`; texto `#1B1A1E` | Fundo quase branco e chapado: medi luminância 240–241 do centro aos cantos, sem vinheta |
-| Etiquetas da lista | cápsulas `#E4E7EA` (estimado) com texto cinza | Metadado discreto |
+## 5. O contêiner e o cursor
 
-**Princípio:** quase todo o filme é neutro (preto, cinza claro, quase branco). A cor forte aparece em poucos lugares e em poucos momentos: o ciano da tela e as cores do ícone.
+- **Um contêiner que nunca corta.** É uma superfície branca (raio, tamanho e posição em molas) que vira notificação, celular, conversa, a tela real do app, o mapa, o balcão e a cartela.
+- **Troca de conteúdo:**
+  - o velho sai em 0,12 s, com escala de 97% e opacidade;
+  - o novo entra 0,12 s depois de a forma começar a mudar: traços se desenham, textos sobem por máscara, telas reais entram por máscara deslizante;
+  - o texto sai antes da próxima transformação.
+- **Cortes de fundo:** no ato 1, a rotina (metrô → trabalho → rua) corta seco **atrás** do contêiner, na batida. O contêiner, que é o celular com as notificações, atravessa os cortes sem cortar.
+- **O cursor conduz cada mudança:**
+  - no "antes", ele é o polegar da personagem (dispensa a notificação, envia a mensagem);
+  - no "depois", é ela usando o app (Copiar, Pagar).
+  - O hook não tem cursor: o interfone toca **sozinho**.
+- **Molas:**
+  - fechadas, zeta 0,85 (sobressinal ≈ 0,5%, nunca quica);
+  - um valor com vários alvos é a soma de uma mola por mudança;
+  - o indicador que estica usa as bordas da frente e de trás em molas diferentes.
+  - Ficam em `lib/motion.js`, compartilhadas por todos os capítulos.
+- **Curvas da marca:**
+  - entrada `cubic-bezier(.22,1,.36,1)`;
+  - confirmação `(.34,1.4,.64,1)`, só no que dá certo;
+  - logo: de 96% a 100% e opacidade, em 650 ms;
+  - cortina `(.65,0,.35,1)`.
 
-### Tradução para a VAI DE LOKAL
+## 6. Câmera
 
-| Papel na referência | Na VAI DE LOKAL |
+| Bloco | Movimento |
 |---|---|
-| Fundo claro do estúdio e da assinatura | Branco `#FFFFFF` (o briefing chama de creme o `#FFFFFF`; "muito branco") |
-| Texto principal quase preto | Tinta `#2A1F18` |
-| Texto secundário cinza | Tinta 2 `#6B5C4E` |
-| Faixas de cinema e cartão preto da pausa | Tinta `#2A1F18`, o tom mais escuro da marca, em vez de preto puro |
-| Legenda em pílula grafite | Pílula de tinta `#2A1F18` com texto branco |
-| A única cor forte (o ciano) | Laranja `#EA6E1A`, só no que é destaque: o pin, o anel que pula pela interface, uma palavra |
-| Tela vazia da virada | Laranja-claro `#FFF0E8`, uma superfície clara e quente, nunca laranja forte de fundo |
-| Etiquetas cinza da lista | Laranja-claro `#FFF0E8` com texto laranja escuro `#C05810` |
-| Concluído | Verde `#1D9E75`, e só aí ("Pagamento confirmado", que já vem verde na tela real) |
+| Gancho e atos 1–2 | **Faixas de cinema** em tinta (132 px em cima, 114 px embaixo, como na referência). **Empurrão lento** de 1,00 a 1,06 por plano, com **câmera na mão** sutil (soma de senos com fase fixa: função pura do tempo). Paralaxe de duas camadas no máximo: primeiro plano e fundo. |
+| Virada (22 s) | As faixas recolhem, a câmera estabiliza e o fundo clareia. É o mesmo gesto da referência quando o produto aparece. |
+| Atos 3–4 | **Respiração:** aproxima e afasta de 3 a 8% a cada frase. **Zoom de 1,0 a 1,35** no elemento que importa (o botão Copiar, o botão Pagar). Nunca vai e volta rápido. |
+| Fim | Parada. Quem se mexe é o bloco da marca e a lista. |
 
-## 3. Tipografia
+- **Nunca:** chicote, tremor forte, rotação perceptível ou zoom brusco.
+- **Desfoque:** só o de movimento natural (4 subquadros por quadro). Nunca decorativo.
 
-### Na referência (estimado pela forma das letras)
-- **Família:** uma única neo-grotesca do sistema, com cara de SF Pro (Display nos títulos, Text nas legendas). Não há segunda família nem serifa.
-- **Legenda do ato 1:** regular, branco quente, centralizada na faixa preta de baixo. O texto mede **30 px** de ascendente a descendente (medido), o que dá um corpo de cerca de 28 px a 1080p. Espaçamento normal, uma linha só.
-- **Legenda em pílula (ato 2):** regular, branco, **alinhada à esquerda** dentro de uma pílula de cerca de 75 px de altura (medido), com cantos arredondados de raio ≈ 1/4 da altura. A pílula já nasce na largura da frase e o texto vai preenchendo.
-- **Frase da pausa:** semibold, cerca de 64 px, branca, centralizada.
-- **Nome na assinatura:** bold, cerca de 100 px, **espaçamento bem fechado** (≈ -0,04 em), quase preto. Frase de apoio em regular, cerca de 30 px, cinza.
-- **Lista rolando:** semibold, cerca de 34 px, espaçamento fechado. Cada item tem uma cápsula de etiqueta pequena e clara.
+## 7. Texto
 
-### Tradução para a VAI DE LOKAL
-- **DM Sans**, a fonte do site, no lugar da neo-grotesca.
-  - **800** nos títulos (frase da pausa, chamadas), com espaçamento -0,03 em, como o título bem fechado da referência.
-  - **700** nos rótulos (itens da lista, etiquetas).
-  - **400/500** nas legendas: 500 dentro da pílula, 400 na legenda sobre as faixas.
-- **DM Mono** só no ID do cliente (LOKAL12), se ele aparecer.
-- **Escala a 1080p:**
+- **Entrada:** por linha, subindo 36 px dentro de uma máscara, 70 ms entre linhas, com a curva de entrada. Sem fade.
+- **Saída:** sobe para fora da máscara em 0,24 s, antes da próxima mudança.
+- **Legenda:**
+  - no "antes", é texto branco na faixa de cinema de baixo;
+  - no "depois", fica numa **pílula de tinta** com texto branco, alinhada à esquerda (a pílula da referência).
+- **A palavra-chave pode ganhar o laranja**, só depois da virada.
+- Proibido: texto centralizado em gradiente, tudo entrando com fade, letras voando, quicando ou girando, e emoji.
 
-  | Uso | Corpo |
+## 8. Som
+
+- **Trilha original de 120 BPM, sintetizada em código.** É medida com `scripts/beats.py` antes de qualquer animação, que gera batidas, tempos fortes e acertos. Mudança de estado cai na batida, momento grande no tempo forte, efeito no acerto.
+- **Arco da trilha:**
+
+  | Bloco | Música |
   |---|---|
-  | Legenda | 40–44 px (maior que a da referência, porque o filme vai ser visto no celular) |
-  | Pílula | 40 px |
-  | Pausa | 96 px |
-  | Lista | 48 px |
-  | Endereço | 44 px |
+  | "Antes" | Lá menor: relógio, grave, o "ding-dong" do interfone e um ostinato que vai pesando até o ato 2 |
+  | Virada | Uma semicolcheia de silêncio e o tempo forte em dó maior |
+  | "Depois" | Groove leve (shaker, palma suave, marimba) |
+  | Fim | Acorde quente. Os dois últimos tempos puxam o loop |
 
-  O logo é o arquivo real, em no máximo 640 px de largura (2× do PNG).
+  Sem pad de fundo genérico.
+- **Efeitos** (`scripts/sfx.mjs`, a partir de `cues.json`):
+  - existentes: click (todo clique do cursor), pop (algo aparece), whoosh (toda transformação do contêiner) e thump (o logo);
+  - **novos:** buzz (o celular vibrando) e shutter (a foto no balcão).
+- -14 LUFS, pico ≤ -1 dBTP.
 
-## 4. Duração dos planos
+## 9. Loop
 
-- **Planos muito longos:** a referência tem só **3 cortes secos** em 70 s (medido: 50,37 s, 52,77 s e 57,00 s; mais uma virada suave em 23,1 s). O plano médio dura cerca de 14 s.
-- **O ritmo vem de dentro do plano, não da montagem:**
-  - **Palavras:** a legenda avança palavra por palavra, acompanhando a voz. No ato 1 são cerca de 2 palavras por segundo.
-  - **Destaques:** no ato 2, o destaque troca de elemento a cada 0,5–0,8 s, um por verbo da lista.
-  - **Câmera:** a câmera muda de tamanho de enquadramento a cada frase (≈ 1,5–3 s).
-- **Pausa curta e isolada:** o cartão preto dura 2,4 s, o suficiente para uma frase de 3 palavras.
-- **Proporções a manter num filme mais curto:** problema ≈ 30%, produto ≈ 40%, pausa ≈ 5–8%, assinatura ≈ 20–25%.
+O último segundo leva o contêiner de volta à forma, ao tamanho e ao lugar do primeiro quadro. O cursor sai do quadro e fica parado fora dele. A anacruse da música cai no "ding" do interfone do gancho.
 
-## 5. Tipos de transição
+`out/teste-de-loop.mp4` emenda o fim no começo, duas voltas, para conferir a costura: o quadro final e o inicial têm que bater, inclusive a posição e a velocidade do cursor.
 
-1. **Empurrão para dentro de uma superfície:** a câmera avança até uma tela ocupar o quadro, e a próxima cena **nasce de dentro dela**. É a transição-assinatura da referência (ato 1 → produto).
-2. **Clarão para uma superfície limpa:** a tela vazia estoura em claro, e o produto aparece já no estúdio claro. As faixas pretas recolhem nesse momento.
-3. **Camadas que se dissolvem:** o problema (janelas empilhadas) desaparece em camadas, deixando a superfície vazia.
-4. **Corte seco para o escuro:** só para a pausa, e de volta.
-5. **Coisas que voam para dentro:** elementos do mundo convergem para o aparelho no fechamento do produto.
-6. **Deslizamento de bloco:** na assinatura, o conjunto marca + frase anda para a esquerda, a lista entra pela direita, e tudo volta ao centro.
-7. **Escurecer no fim:** o último segundo esmaece para cinza.
+## 10. Conflitos e decisões
 
-## 6. Movimentos de câmera
-
-- **Ato 1:** **dolly-in lento e constante**, de cerca de 1,0× a 1,8× em 20 s (estimado), com uma leve subida. Há paralaxe: o primeiro plano (flores) passa mais rápido e desfocado, o que dá profundidade de campo.
-- **Ato 2:** **"respiração"**, com aproximações e afastamentos de 5–12% a cada frase, sempre suaves e sem tremor. O aparelho fica centralizado, ou desloca levemente quando o destaque vai para uma borda.
-- **Assinatura:** câmera parada. Quem se mexe são os blocos (deslizam) e a lista (rola com velocidade constante, com as bordas de cima e de baixo esmaecendo).
-- **Nunca:** chicote, tremor, rotação de câmera, zoom brusco.
-
-## 7. Textura e grão
-
-- **Sem grão:** o ruído fino medido é 0,2–0,6 (em 255) nos fundos lisos e zero no cartão preto. O acabamento é digital e limpo.
-- **No ato 1:** profundidade de campo, luz quente de fim de tarde, reflexo de lente e o brilho da tela de tubo.
-- **No estúdio:** fundo chapado, sombras macias e longas sob o aparelho e o ícone, sem reflexo.
-- **Faixas de cinema:** 132 px em cima e 114 px embaixo (medido, ≈ 2,3:1), **só no ato 1**. Elas somem quando o produto aparece: a forma do quadro muda junto com o assunto.
-- **Áudio:** voz narrando, sobre uma trilha ambiente. A cerca de 103 BPM, ela **não é grudada na grade**, porque quem marca o tempo é a narração. Volume integrado de -14,9 LUFS (medido).
-
-## 8. Como o texto entra e sai
-
-- **Entrada:** **palavra por palavra**, no tempo da fala. Cada palavra surge de um estado apagado e um pouco desfocado (cinza e borrada) até o branco nítido, em cerca de 0,2–0,3 s. A palavra seguinte começa antes de a anterior terminar.
-- **Saída:** a frase inteira some de uma vez, enquanto a próxima já começa. Por cerca de 0,3 s, as duas convivem ("fantasma").
-- **Pílula (ato 2):** a pílula aparece já na largura final e o texto a preenche da esquerda para a direita. Na troca de frase, a pílula se ajusta.
-- **Pausa:** as palavras entram uma a uma com **desfoque para foco**, sem movimento.
-- **Assinatura:** o nome entra com foco (cinza e borrado até nítido). A frase de apoio entra palavra por palavra. A lista rola contínua, com esmaecimento nas bordas.
-- **Nunca há letras voando, quicando ou girando.** O texto é calmo; quem se mexe é a câmera e a interface.
-
----
-
-## 9. Conflitos com as regras do estúdio (CLAUDE.md) e com a marca: o que proponho
-
-| Na referência | A regra | Proposta para a VAI DE LOKAL |
+| Pedido | Problema | Decisão |
 |---|---|---|
-| Palavras entram e frases saem com fade (opacidade + desfoque) | CLAUDE.md: "tudo entrando com fade" é proibido | Manter o **foco** (desfoque → nítido) e acrescentar um **pequeno deslocamento para cima dentro de uma máscara**. A opacidade vai de 40% a 100%, e só nas palavras de legenda. Títulos, interface e logo entram por máscara, deslize ou mola, nunca por fade. |
-| Brilho da tela de tubo e reflexo de lente | CLAUDE.md: "brilho (glow) em interface" é proibido; a marca proíbe brilho no logo | **Sem brilho e sem reflexo.** A luz do ato 1 vira uma superfície clara e quente (laranja-claro) e sombras macias. |
-| Cenário fotográfico (objeto num campo) | Não temos foto nem 3D da marca, e não podemos inventar | O ato 1 vira uma **ilustração de traço da marca** (traço proporcional a 2 px, pontas arredondadas, em tinta com destaque laranja): uma porta e uma caixa, com o mesmo dolly-in lento e as mesmas faixas de cinema. |
-| Música fora de grade, guiada pela voz | CLAUDE.md: acertos na grade de batidas medida | Sem narração em voz, a legenda passa a andar **na grade**, uma palavra por colcheia. A trilha é sintetizada, calma, e cliques e whooshes caem na batida. |
-| Cartão preto puro | Paleta da marca | Cartão em tinta `#2A1F18`. |
-| Título centralizado sobre fundo claro | CLAUDE.md proíbe título centralizado **sobre gradiente** | A referência usa fundo **chapado** (medido, sem vinheta). Mantemos o fundo branco chapado, então não há conflito. |
+| Ato 3: "a tela real 'Seu endereço para compras' do app", com Copiar em CEP, Número, Complemento e Nome | Essa tela não existe no site: só no app logado | **Resolvido:** você mandou os prints reais do app (`assets/09/app/`: "Seu endereço para compras", a continuação dela e a tela inicial "Sua encomenda chegou", tudo com dados de exemplo: Ana Souza, LOKAL12). Uso a tela real. Não há print do estado depois do toque, então o toque em "Copiar" aparece como o botão afundando e o anel laranja pulando para o próximo. **Não invento um "Copiado".** |
+| "Pagar R$ 5,90 e gerar QR Code" | As capturas antigas (`assets/capturas/`) mostram R$ 7,90 | **Sem conflito:** o site já foi atualizado e mostra R$ 5,90. Vou recapturar as três telas. |
+| Mapa com a casa e o pin | O mapa do site é Google Maps (conteúdo de terceiros) | Mapa **desenhado**, como o guia manda |
+| Personagem, entregador, carro, metrô | Não há filmagem | Ilustração de traço, personagem sem rosto, tudo sem marca |
+| Logo | O site só tem o logo em 320 px | **Resolvido:** você mandou o logo laranja e o branco em 989×440, com transparência (`assets/09/app/logo-*.png`). A assinatura fecha na **cartela laranja com o logo branco a 52% da largura** (1000 px, ampliação de 1,01×), como o guia manda. |

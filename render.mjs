@@ -14,11 +14,13 @@
  *   node render.mjs filmes/02-delivery/index.html --sheet          folha de contato (1 quadro por batida)
  *   node render.mjs filmes/02-delivery/index.html --frames 0,2.5   PNGs desses instantes
  *   node render.mjs filmes/02-delivery/index.html --som            só a trilha, já em -14 LUFS (para medir as batidas)
+ *   node render.mjs filmes/02-delivery/index.html --cues cues.json grava as deixas de som do filme (window.CUES)
  *
  * Opções:
- *   --out arquivo.mp4     destino do MP4
+ *   --out arquivo         destino do MP4 (com --som, destino do WAV da trilha)
  *   --beats beats.json    grade de batidas (padrão: beats.json na pasta do filme, senão FILM.beats)
- *   --audio musica.mp3    usa essa música em vez de window.renderAudio
+ *   --audio musica.wav    usa esse arquivo em vez de window.renderAudio; repetida, mixa os arquivos
+ *                         (ex.: --audio music.wav --audio sfx.wav) antes de levar a -14 LUFS
  *   --formato vertical    abre o filme com ?formato=vertical (a página monta FILM e a composição
  *                         para esse formato) e acrescenta "-vertical" ao nome da saída
  *   --param chave=valor   passa ?chave=valor para a página, sem mudar o nome (pode repetir);
@@ -29,7 +31,7 @@
  */
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -49,7 +51,8 @@ const { values: opt, positionals } = parseArgs({
     frames: { type: 'string' },
     som: { type: 'boolean' },
     beats: { type: 'string' },
-    audio: { type: 'string' },
+    audio: { type: 'string', multiple: true },
+    cues: { type: 'string' },
     formato: { type: 'string' },
     param: { type: 'string', multiple: true },
     help: { type: 'boolean', short: 'h' },
@@ -146,10 +149,20 @@ async function normalizeLoudness(src, dst, duration) {
 
 async function buildAudio(page, film, tmp) {
   let src;
-  if (opt.audio) {
-    src = path.resolve(opt.audio);
-    if (!existsSync(src)) throw new Error(`Música não encontrada: ${opt.audio}`);
-    console.log(`  som: usando ${rel(src)}`);
+  if (opt.audio?.length) {
+    const files = opt.audio.map((a) => path.resolve(a));
+    for (const [i, f] of files.entries()) if (!existsSync(f)) throw new Error(`Áudio não encontrado: ${opt.audio[i]}`);
+    if (files.length === 1) {
+      src = files[0];
+      console.log(`  som: usando ${rel(src)}`);
+    } else {
+      // soma simples (normalize=0): o equilíbrio entre os arquivos é o que cada um já traz
+      src = path.join(tmp, 'mix.wav');
+      await ff([...files.flatMap((f) => ['-i', f]),
+        '-filter_complex', `amix=inputs=${files.length}:normalize=0:duration=longest`,
+        '-ar', String(SAMPLE_RATE), '-ac', '2', '-c:a', 'pcm_f32le', src]);
+      console.log(`  som: mixando ${files.map(rel).join(' + ')}`);
+    }
   } else if (film.hasAudio) {
     const b64 = await page.evaluate(async (sr) => {
       const r = await window.renderAudio(sr);
@@ -376,7 +389,7 @@ async function launchBrowser() {
 
 async function main() {
   if (opt.help || positionals.length !== 1) {
-    console.log('Uso: node render.mjs <filme.html> [--sheet | --frames 0,1.5 | --som] [--out x.mp4] [--beats b.json] [--audio m.mp3] [--formato vertical]');
+    console.log('Uso: node render.mjs <filme.html> [--sheet | --frames 0,1.5 | --som | --cues c.json] [--out x.mp4] [--beats b.json] [--audio m.wav ...] [--formato vertical]');
     process.exitCode = opt.help ? 0 : 1;
     return;
   }
@@ -386,7 +399,7 @@ async function main() {
   const name = (base === 'index' ? path.basename(path.dirname(file)) : base) + (opt.formato ? `-${opt.formato}` : '');
   const tmp = path.join(ROOT, '.render-tmp', name);
   await mkdir(tmp, { recursive: true });
-  if (!opt.sheet && !opt.frames) FFMPEG = findFfmpeg();
+  if (!opt.sheet && !opt.frames && !opt.cues) FFMPEG = findFfmpeg();
 
   const browser = await launchBrowser();
   try {
@@ -402,10 +415,23 @@ async function main() {
         console.log(`  ${rel(out)}`);
       }
       await checkContract(page, errors, 'nos quadros');
+    } else if (opt.cues) {
+      const cues = await page.evaluate(() => (typeof window.CUES === 'function' ? window.CUES() : window.CUES) ?? null);
+      if (!cues) throw new Error('O filme não define window.CUES (as deixas de som).');
+      const out = path.resolve(opt.cues);
+      await mkdir(path.dirname(out), { recursive: true });
+      await writeFile(out, JSON.stringify(cues, null, 2));
+      await checkContract(page, errors, 'nas deixas');
+      console.log(`  deixas (${(cues.cues ?? cues).length}): ${rel(out)}`);
     } else if (opt.som) {
       const audio = await buildAudio(page, film, tmp);
       await checkContract(page, errors, 'na trilha');
-      if (audio) console.log(`  trilha: ${rel(audio)}`);
+      if (audio && opt.out) {
+        const out = path.resolve(opt.out);
+        await mkdir(path.dirname(out), { recursive: true });
+        await copyFile(audio, out);
+        console.log(`  trilha: ${rel(out)}`);
+      } else if (audio) console.log(`  trilha: ${rel(audio)}`);
     } else if (opt.sheet) {
       const beats = await loadBeats(file, film);
       const out = await contactSheet(browser, page, film, beats, tmp, name);

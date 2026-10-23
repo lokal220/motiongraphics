@@ -1,0 +1,458 @@
+{
+  "duracao": 45,
+  "bpm": 120,
+  "cues": [
+    {
+      "pan": 0.35,
+      "tipo": "buzz",
+      "t": 1.0107,
+      "rotulo": "buzz (b2)"
+    },
+    {
+      "pan": 0.3,
+      "tipo": "pop",
+      "t": 1.0107,
+      "rotulo": "pop (b2)"
+    },
+    {
+      "t": 2.0107,
+      "tipo": "whoosh",
+      "ganho": 1,
+      "pan": 0,
+      "panFim": 0,
+      "rotulo": "transformação (b4)"
+    },
+    {
+      "pan": 0,
+      "tipo": "buzz",
+      "t": 2.512,
+      "rotulo": "buzz (b5)"
+    },
+    {
+      "pan": 0,
+      "tipo": "pop",
+      "t": 2.512,
+      "rotulo": "pop (b5)"
+    },
+    {
+      "t": 3.0133,
+      "tipo": "click",
+      "pan": 0.45,
+      "rotulo": "clique (b6)"
+    },
+    {
+      "t": 4.0107,
+      "tipo": "whoosh",
+      "ganho": 1,
+      "pan": 0,
+      "panFim": 0,
+      "rotulo": "transformação (b8)"
+    },
+    {
+      "pan": 0,
+      "tipo": "buzz",
+      "t": 4.512,
+      "rotulo": "buzz (b9)"
+    },
+    {
+      "pan": 0,
+      "tipo": "pop",
+      "t": 4.512,
+      "rotulo": "pop (b9)"
+    },
+    {
+      "t": 5.0107,
+      "tipo": "click",
+      "pan": 0.46,
+      "rotulo": "clique (b10)"
+    },
+    {
+      "t": 6.0107,
+      "tipo": "whoosh",
+      "ganho": 1,
+      "pan": 0,
+      "panFim": 0,
+      "rotulo": "transformação (b12)"
+    },
+    {
+      "pan": 0,
+      "tipo": "buzz",
+      "t": 6.512,
+      "rotulo": "buzz (b13)"
+    },
+    {
+      "pan": 0,
+      "tipo": "pop",
+      "t": 6.512,
+      "rotulo": "pop (b13)"
+    },
+    {
+      "t": 7.0107,
+      "tipo": "click",
+      "pan": 0.46,
+      "rotulo": "clique (b14)"
+    },
+    {
+      "t": 8.0107,
+      "tipo": "whoosh",
+      "ganho": 1,
+      "pan": 0,
+      "panFim": 0,
+      "rotulo": "transformação (b16)"
+    },
+    {
+      "pan": 0.1,
+      "tipo": "whoosh",
+      "ganho": 1.2,
+      "panFim": 0.7,
+      "rotulo": "a van sai",
+      "t": 8.512
+    },
+    {
+      "t": 12.0107,
+      "tipo": "whoosh",
+      "ganho": 1,
+      "pan": 0,
+      "panFim": 0,
+      "rotulo": "transformação (b24)"
+    },
+    {
+      "t": 14.0107,
+      "tipo": "whoosh",
+      "ganho": 1,
+      "pan": 0,
+      "panFim": 0.25,
+      "rotulo": "transformação (b28)"
+    },
+    {
+      "t": 14.512,
+      "tipo": "click",
+      "pan": 0.65,
+      "rotulo": "clique (b29)"
+    },
+    {
+      "pan": 0.3,
+      "tipo": "pop",
+      "t": 14.512,
+      "rotulo": "pop (b29)"
+    },
+    {
+      "pan": 0.1,
+      "tipo": "pop",
+      "t": 15.0107,
+      "rotulo": "pop (b30)"
+    },
+    {
+      "t": 16.0107,
+      "tipo": "whoosh",
+      "ganho": 1,
+      "pan": 0.25,
+      "panFim": 0.25,
+      "rotulo": "transformação (b32)"
+    },
+    {
+      "t": 16.512,
+      "tipo": "click",
+      "pan": 0.65,
+      "rotulo": "clique (b33)"
+    },
+    {
+      "pan": 0.3,
+      "tipo": "pop",
+      "t": 16.512,
+      "rotulo": "pop (b33)"
+    },
+    {
+      "pan": 0,
+      "tipo": "pop",
+      "ganho": 0.6,
+      "t": 17.0107,
+      "rotulo": "pop (b34)"
+    },
+    {
+      "t": 18.0107,
+      "tipo": "whoosh",
+      "ganho": 1,
+      "pan": 0.25,
+      "panFim": 0.25,
+      "rotulo": "transformação (b36)"
+    },
+    {
+      "t": 18.512,
+      "tipo": "click",
+      "pan": 0.65,
+      "rotulo": "clique (b37)"
+    },
+    {
+      "pan": 0.3,
+      "tipo": "pop",
+      "t": 18.512,
+      "rotulo": "pop (b37)"
+    },
+    {
+      "pan": 0.1,
+      "tipo": "pop",
+      "t": 19.0133,
+      "rotulo": "pop (b38)"
+    },
+    {
+      "t": 20.0133,
+      "tipo": "whoosh",
+      "ganho": 1,
+      "pan": 0.25,
+      "panFim": 0.25,
+      "rotulo": "transformação (b40)"
+    },
+    {
+      "pan": -0.1,
+      "tipo": "pop",
+      "ganho": 0.5,
+      "t": 20.0133,
+      "rotulo": "pop (b40)"
+    },
+    {
+      "pan": 0.35,
+      "tipo": "pop",
+      "ganho": 0.54,
+      "t": 20.264,
+      "rotulo": "pop (b40.5)"
+    },
+    {
+      "pan": -0.1,
+      "tipo": "pop",
+      "ganho": 0.58,
+      "t": 20.512,
+      "rotulo": "pop (b41)"
+    },
+    {
+      "pan": 0.35,
+      "tipo": "pop",
+      "ganho": 0.62,
+      "t": 20.7627,
+      "rotulo": "pop (b41.5)"
+    },
+    {
+      "pan": -0.1,
+      "tipo": "pop",
+      "ganho": 0.66,
+      "t": 21.0107,
+      "rotulo": "pop (b42)"
+    },
+    {
+      "pan": 0.35,
+      "tipo": "pop",
+      "ganho": 0.7,
+      "t": 21.136,
+      "rotulo": "pop (b42.25)"
+    },
+    {
+      "pan": -0.1,
+      "tipo": "pop",
+      "ganho": 0.74,
+      "t": 21.2613,
+      "rotulo": "pop (b42.5)"
+    },
+    {
+      "pan": 0.35,
+      "tipo": "pop",
+      "ganho": 0.78,
+      "t": 21.3867,
+      "rotulo": "pop (b42.75)"
+    },
+    {
+      "pan": -0.1,
+      "tipo": "pop",
+      "ganho": 0.8200000000000001,
+      "t": 21.512,
+      "rotulo": "pop (b43)"
+    },
+    {
+      "pan": 0.35,
+      "tipo": "pop",
+      "ganho": 0.86,
+      "t": 21.6347,
+      "rotulo": "pop (b43.25)"
+    },
+    {
+      "pan": -0.1,
+      "tipo": "pop",
+      "ganho": 0.9,
+      "t": 21.76,
+      "rotulo": "pop (b43.5)"
+    },
+    {
+      "t": 22.0107,
+      "tipo": "whoosh",
+      "ganho": 1.4,
+      "pan": 0.25,
+      "panFim": 0,
+      "rotulo": "transformação (b44)"
+    },
+    {
+      "t": 24.0133,
+      "tipo": "whoosh",
+      "ganho": 1,
+      "pan": 0,
+      "panFim": 0,
+      "rotulo": "transformação (b48)"
+    },
+    {
+      "t": 24.5093,
+      "tipo": "click",
+      "pan": 0.46,
+      "rotulo": "clique (b49)"
+    },
+    {
+      "t": 25.512,
+      "tipo": "click",
+      "pan": 0.47,
+      "rotulo": "clique (b51)"
+    },
+    {
+      "t": 26.5093,
+      "tipo": "click",
+      "pan": 0.46,
+      "rotulo": "clique (b53)"
+    },
+    {
+      "t": 27.5093,
+      "tipo": "click",
+      "pan": 0.47,
+      "rotulo": "clique (b55)"
+    },
+    {
+      "t": 29.0107,
+      "tipo": "whoosh",
+      "ganho": 1,
+      "pan": 0,
+      "panFim": 0.15,
+      "rotulo": "transformação (b58)"
+    },
+    {
+      "pan": 0.2,
+      "tipo": "pop",
+      "rotulo": "o pin acende",
+      "t": 30.0107
+    },
+    {
+      "t": 32.0107,
+      "tipo": "whoosh",
+      "ganho": 1,
+      "pan": 0.15,
+      "panFim": 0,
+      "rotulo": "transformação (b64)"
+    },
+    {
+      "pan": 0.05,
+      "tipo": "shutter",
+      "t": 32.512,
+      "rotulo": "shutter (b65)"
+    },
+    {
+      "t": 34.0107,
+      "tipo": "whoosh",
+      "ganho": 1,
+      "pan": 0,
+      "panFim": 0,
+      "rotulo": "transformação (b68)"
+    },
+    {
+      "pan": 0.55,
+      "tipo": "buzz",
+      "t": 34.0107,
+      "rotulo": "buzz (b68)"
+    },
+    {
+      "pan": 0,
+      "tipo": "pop",
+      "t": 34.0107,
+      "rotulo": "pop (b68)"
+    },
+    {
+      "t": 35.512,
+      "tipo": "click",
+      "pan": 0.54,
+      "rotulo": "clique (b71)"
+    },
+    {
+      "t": 36.0107,
+      "tipo": "whoosh",
+      "ganho": 1,
+      "pan": 0,
+      "panFim": 0,
+      "rotulo": "transformação (b72)"
+    },
+    {
+      "t": 36.5093,
+      "tipo": "click",
+      "pan": 0.47,
+      "rotulo": "clique (b73)"
+    },
+    {
+      "t": 37.0133,
+      "tipo": "whoosh",
+      "ganho": 1,
+      "pan": 0,
+      "panFim": 0,
+      "rotulo": "transformação (b74)"
+    },
+    {
+      "pan": 0,
+      "tipo": "pop",
+      "rotulo": "pagamento confirmado (o anel pula)",
+      "t": 37.512
+    },
+    {
+      "t": 38.0107,
+      "tipo": "whoosh",
+      "ganho": 1,
+      "pan": 0,
+      "panFim": 0,
+      "rotulo": "transformação (b76)"
+    },
+    {
+      "pan": 0.3,
+      "tipo": "pop",
+      "rotulo": "check no balcão",
+      "t": 38.512
+    },
+    {
+      "pan": 0.3,
+      "tipo": "whoosh",
+      "ganho": 0.5,
+      "panFim": 0.8,
+      "rotulo": "a caixa sai pela direita",
+      "t": 39.512
+    },
+    {
+      "t": 40.0107,
+      "tipo": "whoosh",
+      "ganho": 1.3,
+      "pan": 0,
+      "panFim": 0,
+      "rotulo": "transformação (b80)"
+    },
+    {
+      "pan": 0,
+      "tipo": "thump",
+      "rotulo": "logo",
+      "t": 40.0107
+    },
+    {
+      "pan": 0,
+      "tipo": "whoosh",
+      "ganho": 0.8,
+      "panFim": -0.4,
+      "rotulo": "o bloco desliza",
+      "t": 41.0107
+    },
+    {
+      "t": 44.0107,
+      "tipo": "whoosh",
+      "ganho": 1.2,
+      "pan": 0,
+      "panFim": 0,
+      "rotulo": "transformação (b88)"
+    }
+  ]
+}

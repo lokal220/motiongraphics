@@ -77,10 +77,11 @@ def main():
     folha(os.path.join(a.saida, "folha-2qps.png"), q, 10, 320)
 
     # 2. energia de movimento quadro a quadro (cinza, 320 px)
-    raw = subprocess.run([ff, "-v", "error", "-i", a.mp4, "-vf", "scale=320:-2,format=gray", "-f", "rawvideo", "-"],
-                         capture_output=True, check=True).stdout
+    # a altura é forçada (no vertical, "-2" arredonda diferente da folha e o reshape não fecha)
     w0 = Image.open(q[0]).size
     hh = int(round(320 * w0[1] / w0[0] / 2) * 2)
+    raw = subprocess.run([ff, "-v", "error", "-i", a.mp4, "-vf", f"scale=320:{hh},format=gray", "-f", "rawvideo", "-"],
+                         capture_output=True, check=True).stdout
     fr = np.frombuffer(raw, np.uint8).reshape(-1, hh, 320).astype(np.int16)
     fps = 60.0
     d = np.abs(np.diff(fr, axis=0)).mean(axis=(1, 2))

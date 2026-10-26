@@ -3,7 +3,7 @@
  * Escrita na grade teórica (batida n = n x 0,5 s); o filme e as deixas seguem a grade MEDIDA dela (beats.py).
  * Só música: os efeitos de interface vêm do scripts/sfx.mjs. Sem pad de fundo.
  *
- * Arco (docs/guia-de-estilo.md, seção 8):
+ * Arco (docs/09-diretor/guia-de-estilo.md, seção 8):
  *   gancho e ato 1 (b0-23)   lá menor: o "ding-dong" do interfone, relógio, grave e o ostinato da correria
  *   ato 2 (b24-43)           os favores: pergunta que sobe, resposta que desce; o compasso 10 pesa e corta
  *   ato 3 (b44-63)           a virada em dó maior: groove leve, marimba; um brilho em cada "Copiar"

@@ -5,7 +5,7 @@
 <!--
   O motor do filme 09-diretor. Cada capítulo (capitulos/capN.js) registra os seus planos com F.registra({...});
   este arquivo junta tudo numa linha do tempo só e desenha o quadro do instante t (window.seek). Regras de
-  programação dos capítulos: docs/GUIA-DE-ANIMACAO.md. Planos: docs/lista-de-planos.md.
+  programação dos capítulos: docs/09-diretor/GUIA-DE-ANIMACAO.md. Planos: docs/09-diretor/lista-de-planos.md.
 
   Parâmetros (render.mjs --param chave=valor):
     res=540   animático em 960x540 (desenha tudo no espaço 1920x1080 e reduz)
@@ -70,7 +70,7 @@
     W, H, S, BPM, BEAT, DUR, BATIDAS, VIRADA, RETORNO, TB, hit, cor, fonte, tam, M: window.Motion,
     q, guia: q.get('guia') === '1', SUB: Number(q.get('sub')) || 4,
     capitulos: [], img: {},
-    /** Cada capítulo chama F.registra({...}) (ver docs/GUIA-DE-ANIMACAO.md). */
+    /** Cada capítulo chama F.registra({...}) (ver docs/09-diretor/GUIA-DE-ANIMACAO.md). */
     registra(cap) { this.capitulos.push(cap); },
   };
 })();

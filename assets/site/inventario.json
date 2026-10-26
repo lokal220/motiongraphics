@@ -1,0 +1,520 @@
+{
+  "titulo": "VAI DE LOKAL — Receba suas encomendas numa agência em BH",
+  "imagens": [
+    {
+      "src": "https://vaidelokal.com.br/logo-lokal.png",
+      "alt": "VAI DE LOKAL",
+      "w": 320,
+      "h": 154,
+      "onde": "cabeçalho",
+      "classe": ""
+    },
+    {
+      "src": "https://vaidelokal.com.br/app-tela-encomenda.jpg",
+      "alt": "",
+      "w": 540,
+      "h": 1000,
+      "onde": "corpo",
+      "classe": ""
+    },
+    {
+      "src": "https://vaidelokal.com.br/lojas/mercado-livre.svg",
+      "alt": "Mercado Livre",
+      "w": 345,
+      "h": 136,
+      "onde": "corpo",
+      "classe": ""
+    },
+    {
+      "src": "https://vaidelokal.com.br/lojas/shopee.svg",
+      "alt": "Shopee",
+      "w": 1000,
+      "h": 320,
+      "onde": "corpo",
+      "classe": ""
+    },
+    {
+      "src": "https://vaidelokal.com.br/lojas/shein.svg",
+      "alt": "Shein",
+      "w": 530,
+      "h": 110,
+      "onde": "corpo",
+      "classe": ""
+    },
+    {
+      "src": "https://vaidelokal.com.br/lojas/amazon.svg",
+      "alt": "Amazon",
+      "w": 603,
+      "h": 182,
+      "onde": "corpo",
+      "classe": ""
+    },
+    {
+      "src": "https://vaidelokal.com.br/lojas/magalu.svg",
+      "alt": "Magalu",
+      "w": 490,
+      "h": 140,
+      "onde": "corpo",
+      "classe": ""
+    },
+    {
+      "src": "https://vaidelokal.com.br/lojas/netshoes.svg",
+      "alt": "Netshoes",
+      "w": 300,
+      "h": 47,
+      "onde": "corpo",
+      "classe": ""
+    },
+    {
+      "src": "https://vaidelokal.com.br/lojas/aliexpress.svg",
+      "alt": "AliExpress",
+      "w": 1719,
+      "h": 372,
+      "onde": "corpo",
+      "classe": ""
+    },
+    {
+      "src": "https://vaidelokal.com.br/lojas/temu.svg",
+      "alt": "Temu",
+      "w": 300,
+      "h": 72,
+      "onde": "corpo",
+      "classe": ""
+    },
+    {
+      "src": "https://vaidelokal.com.br/lojas/kabum.svg",
+      "alt": "KaBuM!",
+      "w": 500,
+      "h": 133,
+      "onde": "corpo",
+      "classe": ""
+    },
+    {
+      "src": "https://vaidelokal.com.br/lojas/americanas.svg",
+      "alt": "Americanas",
+      "w": 300,
+      "h": 59,
+      "onde": "corpo",
+      "classe": ""
+    },
+    {
+      "src": "https://vaidelokal.com.br/lojas/mercado-livre.svg",
+      "alt": "",
+      "w": 345,
+      "h": 136,
+      "onde": "corpo",
+      "classe": ""
+    },
+    {
+      "src": "https://vaidelokal.com.br/lojas/shopee.svg",
+      "alt": "",
+      "w": 1000,
+      "h": 320,
+      "onde": "corpo",
+      "classe": ""
+    },
+    {
+      "src": "https://vaidelokal.com.br/lojas/shein.svg",
+      "alt": "",
+      "w": 530,
+      "h": 110,
+      "onde": "corpo",
+      "classe": ""
+    },
+    {
+      "src": "https://vaidelokal.com.br/lojas/amazon.svg",
+      "alt": "",
+      "w": 603,
+      "h": 182,
+      "onde": "corpo",
+      "classe": ""
+    },
+    {
+      "src": "https://vaidelokal.com.br/lojas/magalu.svg",
+      "alt": "",
+      "w": 490,
+      "h": 140,
+      "onde": "corpo",
+      "classe": ""
+    },
+    {
+      "src": "https://vaidelokal.com.br/lojas/netshoes.svg",
+      "alt": "",
+      "w": 300,
+      "h": 47,
+      "onde": "corpo",
+      "classe": ""
+    },
+    {
+      "src": "https://vaidelokal.com.br/lojas/aliexpress.svg",
+      "alt": "",
+      "w": 1719,
+      "h": 372,
+      "onde": "corpo",
+      "classe": ""
+    },
+    {
+      "src": "https://vaidelokal.com.br/lojas/temu.svg",
+      "alt": "",
+      "w": 300,
+      "h": 72,
+      "onde": "corpo",
+      "classe": ""
+    },
+    {
+      "src": "https://vaidelokal.com.br/lojas/kabum.svg",
+      "alt": "",
+      "w": 500,
+      "h": 133,
+      "onde": "corpo",
+      "classe": ""
+    },
+    {
+      "src": "https://vaidelokal.com.br/lojas/americanas.svg",
+      "alt": "",
+      "w": 300,
+      "h": 59,
+      "onde": "corpo",
+      "classe": ""
+    },
+    {
+      "src": "https://vaidelokal.com.br/api/public/agencies/6004e9c8-e9e0-46c0-b6ac-23278b117fe0/photo",
+      "alt": "Fachada da agência T&A Informática",
+      "w": 960,
+      "h": 1280,
+      "onde": "corpo",
+      "classe": "agency-photo"
+    },
+    {
+      "src": "https://maps.googleapis.com/maps/api/js/StaticMapService.GetMapImage?1m2&1i395862&2i583337&2e1&3u12&4m2&1u694&2u518&5m6&1e0&5spt-BR&6sbr&10b1&12b1&14i47083502&8e1&key=AIzaSyAFQ4WoF6M0ABHd4d-wgCFggbSOv0RwUWE&token=17439",
+      "alt": "",
+      "w": 694,
+      "h": 518,
+      "onde": "corpo",
+      "classe": ""
+    },
+    {
+      "src": "https://vaidelokal.com.br/app-tela-encomenda.jpg",
+      "alt": "Tela do app com a encomenda que chegou na agência, o valor da retirada e o botão de pagar",
+      "w": 540,
+      "h": 1000,
+      "onde": "corpo",
+      "classe": ""
+    },
+    {
+      "src": "https://vaidelokal.com.br/app-tela-carteira.jpg",
+      "alt": "Tela da carteira do app, com o saldo e o botão de adicionar saldo via Pix",
+      "w": 540,
+      "h": 1000,
+      "onde": "corpo",
+      "classe": ""
+    },
+    {
+      "src": "https://vaidelokal.com.br/app-tela-retirada.jpg",
+      "alt": "Tela do app com o QR Code e a palavra-chave de retirada",
+      "w": 540,
+      "h": 1000,
+      "onde": "corpo",
+      "classe": ""
+    },
+    {
+      "src": "https://vaidelokal.com.br/logo-lokal.png",
+      "alt": "VAI DE LOKAL",
+      "w": 320,
+      "h": 154,
+      "onde": "rodapé",
+      "classe": ""
+    },
+    {
+      "src": "https://vaidelokal.com.br/app-icon.png",
+      "alt": "icon",
+      "w": 0,
+      "h": 0,
+      "onde": "meta"
+    },
+    {
+      "src": "https://vaidelokal.com.br/og-vaidelokal.png?v=3",
+      "alt": "og:image",
+      "w": 0,
+      "h": 0,
+      "onde": "meta"
+    }
+  ],
+  "variaveis": {
+    "--orange": "#EA6E1A",
+    "--orange-dark": "#C05810",
+    "--orange-pale": "#FFF0E8",
+    "--orange-text": "#7A3810",
+    "--fundo": "#FFFFFF",
+    "--apoio": "#F5F3F0",
+    "--white": "#FFFFFF",
+    "--ink": "#2A1F18",
+    "--ink-2": "#6B5C4E",
+    "--ink-3": "#7F6B59",
+    "--line": "rgba(42, 31, 24, 0.10)",
+    "--line-2": "rgba(42, 31, 24, 0.18)",
+    "--green": "#1D9E75",
+    "--shadow": "0 1px 3px rgba(42, 31, 24, 0.06)",
+    "--shadow-lift": "0 8px 24px rgba(42, 31, 24, 0.08)",
+    "--ease-out": "cubic-bezier(.22, 1, .36, 1)",
+    "--ease-spring": "cubic-bezier(.34, 1.4, .64, 1)"
+  },
+  "coresMaisUsadas": [
+    [
+      "rgb(42, 31, 24)",
+      826
+    ],
+    [
+      "rgb(107, 92, 78)",
+      176
+    ],
+    [
+      "rgb(234, 110, 26)",
+      126
+    ],
+    [
+      "rgb(255, 255, 255)",
+      105
+    ],
+    [
+      "rgb(127, 107, 89)",
+      100
+    ],
+    [
+      "rgb(192, 88, 16)",
+      78
+    ],
+    [
+      "rgba(42, 31, 24, 0.1)",
+      52
+    ],
+    [
+      "rgb(15, 110, 86)",
+      16
+    ],
+    [
+      "rgb(255, 240, 232)",
+      15
+    ],
+    [
+      "rgba(42, 31, 24, 0.18)",
+      14
+    ],
+    [
+      "rgb(74, 61, 51)",
+      12
+    ],
+    [
+      "rgb(245, 243, 240)",
+      9
+    ],
+    [
+      "rgb(0, 0, 0)",
+      8
+    ],
+    [
+      "rgb(122, 56, 16)",
+      8
+    ]
+  ],
+  "fontes": {
+    "h1": {
+      "familia": "\"DM Sans\", system-ui, sans-serif",
+      "peso": "800",
+      "tamanho": "58px",
+      "espaco": "-1.74px"
+    },
+    "h2": {
+      "familia": "\"DM Sans\", system-ui, sans-serif",
+      "peso": "800",
+      "tamanho": "23px",
+      "espaco": "-0.46px"
+    },
+    "corpo": {
+      "familia": "\"DM Sans\", system-ui, sans-serif",
+      "peso": "700",
+      "tamanho": "25px",
+      "espaco": "-0.25px"
+    },
+    "botao": {
+      "familia": "\"DM Sans\", system-ui, sans-serif",
+      "peso": "700",
+      "tamanho": "15px",
+      "espaco": "normal"
+    }
+  },
+  "facesCarregadas": [
+    "DM Sans 400 normal",
+    "DM Sans 600 normal",
+    "DM Sans 700 normal",
+    "DM Sans 800 normal"
+  ],
+  "folhasDeFonte": [
+    "https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&display=swap"
+  ],
+  "secoes": [
+    {
+      "id": "",
+      "classe": "hero",
+      "titulo": "Chega de perder encomendas.",
+      "texto": "Chega de perder encomendas. Compre onde quiser. A gente recebe pra você. Use o endereço de uma agência parceira nas suas compras online. A gente recebe, te avisa pelo WhatsApp e você retira quando pud"
+    },
+    {
+      "id": "como-funciona",
+      "classe": "",
+      "titulo": "Seu endereço para compras online",
+      "texto": "Como funciona Seu endereço para compras online 1 Crie sua conta e escolha a agência Grátis, em poucos minutos. Você escolhe a agência parceira mais perto e recebe o seu ID. 2 Compre com o endereço da "
+    },
+    {
+      "id": "depoimentos",
+      "classe": "",
+      "titulo": "Quem já usa, entende a tranquilidade.",
+      "texto": "Avaliações reais no Google Quem já usa, entende a tranquilidade. H Helia Gonçalves Local Guide · 28 avaliações É uma tranquilidade ter a LOKAL para receber minhas encomendas, não me preocupo mais com "
+    },
+    {
+      "id": "mural-avaliacoes",
+      "classe": "reviews-wall",
+      "titulo": "",
+      "texto": "H Helia Gonçalves Local Guide · 28 avaliações É uma tranquilidade ter a LOKAL para receber minhas encomendas, não me preocupo mais com horário de entregas. Além disso os meninos são muito educados e a"
+    },
+    {
+      "id": "problemas",
+      "classe": "",
+      "titulo": "Sua compra chegou. Você não estava.",
+      "texto": "Sua compra chegou. Você não estava. E agora é torcer pelo vizinho, pelo porteiro ou pela terceira tentativa. HOJE Entrega na sua casa Você precisa estar em casa Porteiro ou vizinho, se der sorte Três "
+    },
+    {
+      "id": "precos",
+      "classe": "",
+      "titulo": "Preço simples, sem surpresa",
+      "texto": "Preço simples, sem surpresa Você paga uma vez, só na retirada, pelo tamanho do pacote. E tem 7 dias úteis para buscar. R$ 5,90 Pacote pequeno, médio ou grande maior lado até 60 cm · até 20 kg Pequeno "
+    },
+    {
+      "id": "tabela-precos",
+      "classe": "faixas",
+      "titulo": "",
+      "texto": "R$ 5,90 Pacote pequeno, médio ou grande maior lado até 60 cm · até 20 kg Pequeno Capinha de celular, fone de ouvido até 20 cm · até 1 kg Médio Camiseta no saquinho, livro, caixa de tênis até 40 cm · a"
+    },
+    {
+      "id": "agencias",
+      "classe": "",
+      "titulo": "Nossa rede",
+      "texto": "Agências parceiras Nossa rede Escolha a agência parceira mais perto de você para receber suas encomendas com segurança. Hoje atendemos em Belo Horizonte, com agência no bairro Jardim América, região O"
+    },
+    {
+      "id": "lista-agencias",
+      "classe": "rede-lista",
+      "titulo": "",
+      "texto": "T&A Informática Agência LOKAL Rua Lindolfo de Azevedo, 1548, Jardim América Belo Horizonte Seg a Sex 08:00 às 19:00 Sáb 09:00 às 14:00 Aceita todos os tamanhos Ver como chegar"
+    },
+    {
+      "id": "mapa-canvas",
+      "classe": "mapa-canvas",
+      "titulo": "",
+      "texto": ""
+    },
+    {
+      "id": "perto-de-voce",
+      "classe": "perto",
+      "titulo": "Sua região pode ser a próxima",
+      "texto": "Próximas agências Sua região pode ser a próxima Ainda não tem uma Vai de Lokal perto de você? Conte onde você mora. É com esses pedidos que a gente decide onde abrir as próximas agências. Seu CEP Não "
+    },
+    {
+      "id": "perto-form",
+      "classe": "perto-form",
+      "titulo": "",
+      "texto": "Seu CEP Não sei meu CEP Seu WhatsApp +55 Seu WhatsApp serve para uma coisa só: avisar quando abrir uma agência perto de você. Uma mensagem, e você sai quando quiser. Quero uma agência perto de mim Já "
+    },
+    {
+      "id": "app",
+      "classe": "",
+      "titulo": "Tudo pelo app",
+      "texto": "Tudo pelo app Do aviso de chegada à retirada no balcão, tudo acontece no seu celular. Chegou? Aparece no app Você recebe o aviso no WhatsApp e acompanha a encomenda pelo app, com o valor da retirada. "
+    },
+    {
+      "id": "faq",
+      "classe": "",
+      "titulo": "Perguntas frequentes",
+      "texto": "Perguntas frequentes Funciona com qualquer loja online? Sim. Qualquer loja que permita inserir um endereço de entrega: Shopee, Mercado Livre, Amazon, Shein, Magalu, Temu, AliExpress, Americanas, Casas"
+    },
+    {
+      "id": "faq-list",
+      "classe": "faq-list",
+      "titulo": "",
+      "texto": "Funciona com qualquer loja online? Sim. Qualquer loja que permita inserir um endereço de entrega: Shopee, Mercado Livre, Amazon, Shein, Magalu, Temu, AliExpress, Americanas, Casas Bahia, KaBuM, Netsho"
+    },
+    {
+      "id": "guias",
+      "classe": "",
+      "titulo": "Já passou por alguma dessas?",
+      "texto": "Guias Já passou por alguma dessas? Não estava em casa na entrega A encomenda voltou para o remetente O que é um ponto de retirada? Ver todos os guias"
+    },
+    {
+      "id": "guias-lista",
+      "classe": "guias-lista recolhida",
+      "titulo": "",
+      "texto": "Não estava em casa na entrega A encomenda voltou para o remetente O que é um ponto de retirada?"
+    },
+    {
+      "id": "",
+      "classe": "cta",
+      "titulo": "Pronto pra nunca mais perder uma encomenda?",
+      "texto": "COMECE AGORA Pronto pra nunca mais perder uma encomenda? Crie sua conta em poucos minutos, escolha a agência mais perto de você e comece a receber suas encomendas com segurança. Criar minha conta grát"
+    }
+  ],
+  "baixadas": [
+    {
+      "src": "https://vaidelokal.com.br/logo-lokal.png",
+      "alt": "VAI DE LOKAL",
+      "w": 320,
+      "h": 154,
+      "onde": "cabeçalho",
+      "classe": "",
+      "arquivo": "site/logo-lokal.png"
+    },
+    {
+      "src": "https://vaidelokal.com.br/app-tela-encomenda.jpg",
+      "alt": "",
+      "w": 540,
+      "h": 1000,
+      "onde": "corpo",
+      "classe": "",
+      "arquivo": "site/app-tela-encomenda.jpg"
+    },
+    {
+      "src": "https://vaidelokal.com.br/app-tela-carteira.jpg",
+      "alt": "Tela da carteira do app, com o saldo e o botão de adicionar saldo via Pix",
+      "w": 540,
+      "h": 1000,
+      "onde": "corpo",
+      "classe": "",
+      "arquivo": "site/app-tela-carteira.jpg"
+    },
+    {
+      "src": "https://vaidelokal.com.br/app-tela-retirada.jpg",
+      "alt": "Tela do app com o QR Code e a palavra-chave de retirada",
+      "w": 540,
+      "h": 1000,
+      "onde": "corpo",
+      "classe": "",
+      "arquivo": "site/app-tela-retirada.jpg"
+    },
+    {
+      "src": "https://vaidelokal.com.br/app-icon.png",
+      "alt": "icon",
+      "w": 0,
+      "h": 0,
+      "onde": "meta",
+      "arquivo": "site/app-icon.png"
+    },
+    {
+      "src": "https://vaidelokal.com.br/og-vaidelokal.png?v=3",
+      "alt": "og:image",
+      "w": 0,
+      "h": 0,
+      "onde": "meta",
+      "arquivo": "site/og-vaidelokal.png"
+    }
+  ],
+  "arquivosDeFonte": []
+}

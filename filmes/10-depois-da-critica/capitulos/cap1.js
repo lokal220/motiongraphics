@@ -1,5 +1,5 @@
 /**
- * Capítulo 1: gancho e correria (P01-P05, batidas 0-24). Ver docs/lista-de-planos.md e docs/GUIA-DE-ANIMACAO.md.
+ * Capítulo 1: gancho e correria (P01-P05, batidas 0-24). Ver docs/09-diretor/lista-de-planos.md e docs/09-diretor/GUIA-DE-ANIMACAO.md.
  *
  *   P01 (b0-3)   o gancho: o contêiner largo é dois lugares ao mesmo tempo. À esquerda, a portaria sem porteiro:
  *                o interfone toca sozinho ("ding" b0, "dong" b1, já na música). À direita, o bolso da jaqueta:

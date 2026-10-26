@@ -1,0 +1,4 @@
+quadros: 3600 (60.00 s a 60 qps)
+ação mais rápida: quadros 2611-2622 (43.517-43.700 s)
+trechos de 0,5 s sem mudança visível começando em: [0.0, 2.07, 7.6, 13.12, 16.1, 18.9, 19.98, 21.88, 29.1, 31.02, 31.98, 33.52, 38.6, 45.02, 47.6, 50.62, 56.95, 59.48]
+batidas mais paradas (batida, mudança média por quadro): [(0, 0.0), (27, 0.0), (33, 0.0), (34, 0.0), (35, 0.0), (40, 0.0), (41, 0.0), (42, 0.0)]

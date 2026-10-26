@@ -1,0 +1,369 @@
+{
+  "duracao": 60,
+  "bpm": 120,
+  "cues": [
+    {
+      "pan": 0,
+      "tipo": "whoosh",
+      "ganho": 0.6,
+      "rotulo": "o pin solta (b1)",
+      "t": 0.5093
+    },
+    {
+      "pan": 0,
+      "tipo": "thump",
+      "rotulo": "o pin toca (b2)",
+      "t": 1.0107
+    },
+    {
+      "pan": 0,
+      "tipo": "whoosh",
+      "ganho": 1.1,
+      "rotulo": "a tela abre (b2)",
+      "t": 1.0107
+    },
+    {
+      "pan": 0,
+      "tipo": "pop",
+      "rotulo": "traço sob o LOKAL12 (b4)",
+      "t": 2.0107
+    },
+    {
+      "t": 2.512,
+      "tipo": "whoosh",
+      "ganho": 0.4,
+      "pan": 0,
+      "panFim": 0,
+      "rotulo": "transformação (b5)"
+    },
+    {
+      "t": 4.0107,
+      "tipo": "click",
+      "pan": 0.62,
+      "rotulo": "clique (b8)"
+    },
+    {
+      "t": 5.0107,
+      "tipo": "click",
+      "pan": 0.62,
+      "rotulo": "clique (b10)"
+    },
+    {
+      "pan": 0,
+      "tipo": "whoosh",
+      "ganho": 0.45,
+      "rotulo": "rolagem (b11)",
+      "t": 5.512
+    },
+    {
+      "t": 7.0107,
+      "tipo": "click",
+      "pan": 0.62,
+      "rotulo": "clique (b14)"
+    },
+    {
+      "t": 8.512,
+      "tipo": "click",
+      "pan": 0.62,
+      "rotulo": "clique (b17)"
+    },
+    {
+      "t": 9.0107,
+      "tipo": "whoosh",
+      "ganho": 1,
+      "pan": 0,
+      "panFim": 0,
+      "rotulo": "transformação (b18)"
+    },
+    {
+      "pan": 0,
+      "tipo": "pop",
+      "rotulo": "o ID (b18)",
+      "t": 9.1467
+    },
+    {
+      "t": 12.008,
+      "tipo": "whoosh",
+      "ganho": 1,
+      "pan": 0,
+      "panFim": 0,
+      "rotulo": "transformação (b24)"
+    },
+    {
+      "pan": 0,
+      "tipo": "pop",
+      "ganho": 0.6,
+      "rotulo": "traço sob o endereço (b26)",
+      "t": 13.0133
+    },
+    {
+      "t": 15.512,
+      "tipo": "whoosh",
+      "ganho": 1,
+      "pan": 0,
+      "panFim": 0,
+      "rotulo": "transformação (b31)"
+    },
+    {
+      "pan": 0,
+      "tipo": "shutter",
+      "rotulo": "o registro com foto (b32)",
+      "t": 16.0107
+    },
+    {
+      "pan": 0,
+      "tipo": "pop",
+      "ganho": 0.5,
+      "rotulo": "traço sob a data do registro (b34)",
+      "t": 17.0133
+    },
+    {
+      "pan": 0,
+      "tipo": "buzz",
+      "rotulo": "o aviso chega (b37)",
+      "t": 18.5093
+    },
+    {
+      "pan": 0,
+      "tipo": "pop",
+      "ganho": 0.8,
+      "rotulo": "o aviso (b37)",
+      "t": 18.5093
+    },
+    {
+      "pan": 0,
+      "tipo": "pop",
+      "ganho": 0.5,
+      "rotulo": "a segunda frase do aviso (b39)",
+      "t": 19.512
+    },
+    {
+      "t": 23.512,
+      "tipo": "click",
+      "pan": 0.69,
+      "rotulo": "clique (b47)"
+    },
+    {
+      "t": 23.512,
+      "tipo": "whoosh",
+      "ganho": 1,
+      "pan": 0,
+      "panFim": 0,
+      "rotulo": "transformação (b47)"
+    },
+    {
+      "pan": 0,
+      "tipo": "pop",
+      "ganho": 0.5,
+      "rotulo": "anel no Aguardando (b48)",
+      "t": 24.0107
+    },
+    {
+      "pan": 0,
+      "tipo": "pop",
+      "ganho": 0.5,
+      "rotulo": "anel no Aguardando pagamento (b50)",
+      "t": 25.0133
+    },
+    {
+      "pan": 0,
+      "tipo": "whoosh",
+      "ganho": 0.5,
+      "rotulo": "a tela rola até o total (b52)",
+      "t": 26.0107
+    },
+    {
+      "pan": 0,
+      "tipo": "pop",
+      "ganho": 0.7,
+      "rotulo": "anel no R$ 5,90 (b54)",
+      "t": 27.0133
+    },
+    {
+      "t": 28.008,
+      "tipo": "whoosh",
+      "ganho": 1,
+      "pan": 0,
+      "panFim": 0,
+      "rotulo": "transformação (b56)"
+    },
+    {
+      "pan": 0,
+      "tipo": "pop",
+      "ganho": 1,
+      "rotulo": "R$ 5,90 (b56)",
+      "t": 28.1467
+    },
+    {
+      "t": 30.5093,
+      "tipo": "whoosh",
+      "ganho": 0.45,
+      "pan": 0,
+      "panFim": 0,
+      "rotulo": "transformação (b61)"
+    },
+    {
+      "pan": 0,
+      "tipo": "pop",
+      "ganho": 0.8,
+      "rotulo": "R$ 9,90 (b61)",
+      "t": 30.6453
+    },
+    {
+      "t": 33.0107,
+      "tipo": "whoosh",
+      "ganho": 0.45,
+      "pan": 0,
+      "panFim": 0,
+      "rotulo": "transformação (b66)"
+    },
+    {
+      "pan": 0,
+      "tipo": "pop",
+      "ganho": 1,
+      "rotulo": "R$ 19,90, o maior (b66)",
+      "t": 33.1467
+    },
+    {
+      "t": 35.512,
+      "tipo": "whoosh",
+      "ganho": 1,
+      "pan": 0,
+      "panFim": 0,
+      "rotulo": "transformação (b71)"
+    },
+    {
+      "t": 36.008,
+      "tipo": "click",
+      "pan": 0.69,
+      "rotulo": "clique (b72)"
+    },
+    {
+      "t": 37.0107,
+      "tipo": "whoosh",
+      "ganho": 1,
+      "pan": 0,
+      "panFim": 0,
+      "rotulo": "transformação (b74)"
+    },
+    {
+      "pan": 0,
+      "tipo": "pop",
+      "rotulo": "Pagamento confirmado (b74)",
+      "t": 37.0107
+    },
+    {
+      "pan": 0,
+      "tipo": "pop",
+      "ganho": 0.55,
+      "rotulo": "anel no Saldo suficiente (b76,5)",
+      "t": 38.2613
+    },
+    {
+      "t": 40.0107,
+      "tipo": "whoosh",
+      "ganho": 0.5,
+      "pan": 0,
+      "panFim": 0,
+      "rotulo": "transformação (b80)"
+    },
+    {
+      "t": 42.008,
+      "tipo": "whoosh",
+      "ganho": 1,
+      "pan": 0,
+      "panFim": 0,
+      "rotulo": "transformação (b84)"
+    },
+    {
+      "pan": 0,
+      "tipo": "pop",
+      "ganho": 0.6,
+      "rotulo": "anel no QR (b85)",
+      "t": 42.512
+    },
+    {
+      "t": 43.0133,
+      "tipo": "whoosh",
+      "ganho": 0.5,
+      "pan": 0,
+      "panFim": 0,
+      "rotulo": "transformação (b86)"
+    },
+    {
+      "t": 44.0107,
+      "tipo": "click",
+      "pan": 0.26,
+      "rotulo": "clique (b88)"
+    },
+    {
+      "t": 44.5093,
+      "tipo": "whoosh",
+      "ganho": 1,
+      "pan": 0,
+      "panFim": 0,
+      "rotulo": "transformação (b89)"
+    },
+    {
+      "pan": 0,
+      "tipo": "pop",
+      "rotulo": "a palavra-chave (b89)",
+      "t": 44.6453
+    },
+    {
+      "t": 47.0107,
+      "tipo": "whoosh",
+      "ganho": 1,
+      "pan": 0,
+      "panFim": 0,
+      "rotulo": "transformação (b94)"
+    },
+    {
+      "pan": 0,
+      "tipo": "pop",
+      "rotulo": "7 dias úteis (b94)",
+      "t": 47.1467
+    },
+    {
+      "t": 50.008,
+      "tipo": "whoosh",
+      "ganho": 1,
+      "pan": 0,
+      "panFim": 0,
+      "rotulo": "transformação (b100)"
+    },
+    {
+      "pan": 0,
+      "tipo": "pop",
+      "rotulo": "R$ 0,84 (b100)",
+      "t": 50.1467
+    },
+    {
+      "pan": 0,
+      "tipo": "pop",
+      "ganho": 0.5,
+      "rotulo": "o teto da taxa (b106,5)",
+      "t": 53.264
+    },
+    {
+      "t": 56.008,
+      "tipo": "whoosh",
+      "ganho": 1.2,
+      "pan": 0,
+      "panFim": 0,
+      "rotulo": "transformação (b112)"
+    },
+    {
+      "pan": 0,
+      "tipo": "thump",
+      "rotulo": "a cartela (b112)",
+      "t": 56.008
+    },
+    {
+      "pan": 0,
+      "tipo": "pop",
+      "rotulo": "o pin assenta e a logo se abre (b113)",
+      "t": 56.512
+    }
+  ]
+}

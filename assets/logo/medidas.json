@@ -1,0 +1,28 @@
+{
+ "branco": {
+  "componentes": 19,
+  "pin_caixa": [
+   128,
+   168,
+   338,
+   440
+  ],
+  "tamanho": [
+   989,
+   440
+  ]
+ },
+ "laranja": {
+  "componentes": 19,
+  "pin_caixa": [
+   128,
+   168,
+   338,
+   440
+  ],
+  "tamanho": [
+   989,
+   440
+  ]
+ }
+}

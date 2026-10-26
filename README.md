@@ -4,6 +4,52 @@ Filmes de motion graphics feitos em código. Cada filme é uma página HTML com 
 
 As regras do estúdio estão em [CLAUDE.md](CLAUDE.md).
 
+## O filme 11: tutorial de primeiro acesso (60 s, 1080×1920, 60 fps, 120 BPM)
+
+> VAI DE LOKAL, "Compre onde quiser. A gente recebe pra você.": o tutorial que a pessoa assiste depois de criar a conta e abrir o app pela primeira vez. Ele mostra, nas telas reais, como comprar com o endereço da agência, o aviso no WhatsApp, quanto custa, como pagar pelo app e como retirar com QR Code.
+
+| Entrega | Arquivo |
+|---|---|
+| Filme | `resultados/tutorial-primeiro-acesso-vertical.mp4` |
+| Teste de loop (duas voltas emendadas) | `out/teste-de-loop.mp4` |
+| Pôster | `out/poster.png` |
+| Folha de contato (um quadro por batida) | `out/folha-de-contato.png` |
+| Guia de estilo, lista de planos (13 decisões), guia de animação | `docs/guia-de-estilo.md`, `docs/lista-de-planos.md`, `docs/GUIA-DE-ANIMACAO.md` |
+| Registro de crítica | `docs/registro-de-critica.md` (diretor) e `docs/critica/cap1.md` … `cap4.md` (animadores) |
+
+### Como ele é feito
+- **`filmes/11-tutorial-primeiro-acesso/index.html`:** o motor, uma cópia do modelo da skill motion-reel. Ele tem o contêiner que nunca corta, as legendas em pílula e as deixas de som. Mudanças deste filme:
+  - um **dedo** (círculo de toque) no lugar da seta, que toca e arrasta;
+  - desfoque de movimento com 8 subquadros;
+  - a pílula da legenda abre e fecha por recorte, sem fade.
+- **`capitulos/comum.js` e `cap1.js` … `cap4.js`:** os ajudantes comuns e os quatro capítulos. Cada capítulo foi escrito por um animador (subagente), passou por um crítico independente e teve rodadas de correção.
+- **`trilha.js`:** a trilha original, em dó maior, I-V-vi-IV. Tem acentos nos momentos grandes, acentos que crescem nas linhas de preço e uma anacruse que puxa o loop.
+- **Interface real:**
+  - `assets/telas/`: os cinco prints do app, da conta de exemplo, com os recortes medidos em `medidas.json`;
+  - `assets/logo/`: a logo branca e a laranja, com o pin separado por componente conexo, sem redesenhar;
+  - `assets/site/`: o inventário do site, capturado com o Playwright.
+- **Loop:** o quadro de 60 s é idêntico, pixel a pixel, ao de 0 s.
+
+### Refazer do zero
+```bash
+node render.mjs filmes/11-tutorial-primeiro-acesso/index.html --som --out filmes/11-tutorial-primeiro-acesso/audio/music.wav
+python scripts/beats.py filmes/11-tutorial-primeiro-acesso/audio/music.wav filmes/11-tutorial-primeiro-acesso/beats.json --bpm 120
+node render.mjs filmes/11-tutorial-primeiro-acesso/index.html --cues filmes/11-tutorial-primeiro-acesso/cues.json
+node scripts/sfx.mjs filmes/11-tutorial-primeiro-acesso/cues.json filmes/11-tutorial-primeiro-acesso/audio/sfx.wav
+node render.mjs filmes/11-tutorial-primeiro-acesso/index.html --param escala=0.5 --param sub=1 --audio filmes/11-tutorial-primeiro-acesso/audio/music.wav --out .render-tmp/11-animatico.mp4
+node render.mjs filmes/11-tutorial-primeiro-acesso/index.html --audio filmes/11-tutorial-primeiro-acesso/audio/music.wav --audio filmes/11-tutorial-primeiro-acesso/audio/sfx.wav --out resultados/tutorial-primeiro-acesso-vertical.mp4
+bash scripts/entregas_11.sh
+```
+
+Os comandos fazem, na ordem:
+1. a trilha só de música, em -14 LUFS;
+2. a grade medida;
+3. as deixas de som tiradas da linha do tempo;
+4. os efeitos;
+5. o animático em 540×960;
+6. o render final, com música e efeitos;
+7. o teste de loop, a folha de contato e o pôster.
+
 ## O filme 09-diretor (45 s, 1920×1080, 60 fps, 120 BPM)
 
 > VAI DE LOKAL, "Compre onde quiser. A gente recebe pra você."
@@ -12,11 +58,11 @@ As regras do estúdio estão em [CLAUDE.md](CLAUDE.md).
 | Entrega | Arquivo |
 |---|---|
 | Filme | `resultados/09-diretor.mp4` |
-| Teste de loop (duas voltas emendadas) | `out/teste-de-loop.mp4` |
-| Pôster | `out/poster.png` |
-| Folha de contato (um quadro por batida) | `out/folha-de-contato.png` |
-| Guia de estilo, lista de planos, guia de animação | `docs/guia-de-estilo.md`, `docs/lista-de-planos.md`, `docs/GUIA-DE-ANIMACAO.md` |
-| Registro de crítica | `docs/registro-de-critica.md` (diretor) e `docs/critica/cap1.md` … `cap4.md` (animadores) |
+| Teste de loop (duas voltas emendadas) | `out/09-diretor/teste-de-loop.mp4` |
+| Pôster | `out/09-diretor/poster.png` |
+| Folha de contato (um quadro por batida) | `out/09-diretor/folha-de-contato.png` |
+| Guia de estilo, lista de planos, guia de animação | `docs/09-diretor/guia-de-estilo.md`, `docs/09-diretor/lista-de-planos.md`, `docs/09-diretor/GUIA-DE-ANIMACAO.md` |
+| Registro de crítica | `docs/09-diretor/registro-de-critica.md` (diretor) e `docs/09-diretor/critica/cap1.md` … `cap4.md` (animadores) |
 
 ### Como ele é feito
 - **`filmes/09-diretor/index.html`:** o motor. Junta os capítulos numa linha do tempo e cuida de:
@@ -72,6 +118,8 @@ A pasta tem:
 | `scripts/beats.py` | Mede a trilha: batidas, tempos fortes e acertos (`beats.json` + `beats.js`) |
 | `scripts/sfx.mjs` | Sintetiza os efeitos de interface a partir do `cues.json` |
 | `scripts/folha.py` | Folha de quadros, prova de leitura a 360 px (`--celular`) e comparação de quadros (`--compara`) |
+| `scripts/critica.py` | Materiais da crítica de um MP4: folha a 2 qps, tira de 12 quadros, teste de celular, trechos parados (agora também em vídeo vertical) |
+| `scripts/entregas_11.sh` | Entregas do filme 11: teste de loop, folha de contato e pôster |
 | `scripts/medir_batidas.py` | Medidor de grade dos filmes 01 a 07 |
 | `scripts/capturar_site.mjs`, `capturar_guia.mjs`, `capturar_09.mjs` | Capturas reais com o Playwright |
 
@@ -84,6 +132,7 @@ A pasta tem:
 | 07 (lista de estados, a partir do guia da marca) | `resultados/07-lista-de-estados.mp4` |
 | 08 (som na batida, ninguém em casa) | `resultados/08-som-na-batida.mp4` |
 | 09 (diretor, 45 s) | `resultados/09-diretor.mp4` |
-| 10 (o 09 depois da crítica de diretor: cortinas da marca, gancho, telas do app em alta) | `resultados/10-depois-da-critica.mp4` (rodadas em `out/10-critica/` e `docs/registro-de-critica.md`) |
+| 10 (o 09 depois da crítica de diretor: cortinas da marca, gancho, telas do app em alta) | `resultados/10-depois-da-critica.mp4` (rodadas em `out/10-critica/` e `docs/09-diretor/registro-de-critica.md`) |
+| 11 (tutorial de primeiro acesso, vertical, 60 s) | `resultados/tutorial-primeiro-acesso-vertical.mp4` |
 
 A pasta `refs/` (vídeo de referência de terceiros) fica fora do Git e serve só para estudar a gramática.

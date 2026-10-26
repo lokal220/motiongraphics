@@ -1,139 +1,139 @@
-# Registro de crítica: 09-diretor
+# Registro de crítica: tutorial de primeiro acesso (filme 11)
 
-**Critérios** (nota de 1 a 10): gancho, leitura a 360 px de largura, movimento, composição, profundidade, sincronia do som e acabamento.
+Este arquivo junta as passadas do diretor. O registro plano a plano de cada animador está em `docs/critica/cap1.md` … `cap4.md`.
 
-**Regra:** cada plano tem no mínimo 3 rodadas. Corrigir os 3 maiores problemas e repetir até toda nota ser 8 ou mais.
+Os critérios, todos de 1 a 10:
+- gancho;
+- leitura a 360 px de largura;
+- movimento;
+- composição;
+- profundidade;
+- sincronia do som;
+- acabamento;
+- se todo valor dá para ler.
 
-O registro plano a plano de cada animador está em `docs/critica/cap1.md` … `cap4.md`. Este arquivo junta:
-- as notas finais de cada plano;
-- as rodadas do diretor sobre o filme inteiro (folha de contato, animático, acabamento e render final).
+A meta é 8 ou mais em tudo.
 
-## Notas finais por plano (fase 1, dos animadores)
+## Revisão da lista de planos (antes de qualquer código)
 
-| Plano | Rodadas | gancho | leitura 360 | movimento | composição | profundidade | sincronia | acabamento |
-|---|---|---|---|---|---|---|---|---|
-| P01 | 3 | 8 | 8 | 8 | 8 | 8 | 9 | 8 |
-| P02 | 3 | 8 | 9 | 8 | 8 | 8 | 9 | 8 |
-| P03 | 3 | 8 | 9 | 8 | 8 | 8 | 9 | 8 |
-| P04 | 3 | 8 | 9 | 8 | 8 | 9 | 9 | 8 |
-| P05 | 3 | 8 | 8 | 8 | 8 | 8 | 8 | 8 |
-| P06 | 4 | 8 | 8 | 8 | 8 | 8 | 8 | 8 |
-| P07 | 4 | 8 | 8 | 8 | 8 | 8 | 9 | 8 |
-| P08 | 4 | 8 | 8 | 8 | 8 | 8 | 9 | 8 |
-| P09 | 4 | 8 | 8 | 8 | 8 | 8 | 9 | 8 |
-| P10 | 4 | 9 | 8 | 8 | 8 | 8 | 9 | 8 |
-| P11 | 4 | 8 | 9 | 8 | 8 | 8 | 9 | 8 |
-| P12 | 4 | 8 | 8 | 8 | 8 | 8 | 9 | 8 |
-| P13 | 5 | 8 | 8 | 8 | 8 | 8 | 9 | 8 |
-| P14 | 3 | 8 | 8 | 8 | 8 | 8 | 9 | 8 |
-| P15 | 4 | 8 | 9 | 8 | 8 | 8 | 9 | 8 |
-| P16 | 3 | 8 | 9 | 8 | 8 | 8 | 9 | 8 |
-| P17 | 4 | 8 | 8 | 8 | 8 | 8 | 9 | 8 |
-| P18 | 3 | 8 | 8 | 8 | 8 | 8 | 9 | 8 |
-| P19 | 3 | 8 | 9 | 8 | 8 | 8 | 9 | 8 |
+A versão 1 da lista passou por uma revisão adversária: quatro revisores independentes (fidelidade ao briefing, interface real e marca, contas de tempo, quem assiste sem som num celular) e um verificador para cada um. Foram 51 achados confirmados e 7 derrubados.
 
-O detalhe de cada rodada (notas, os 3 problemas e as correções) está em `docs/critica/cap1.md` … `cap4.md`.
+Os mais graves, corrigidos na versão 2:
+1. **A palavra-chave CAIXA.482913 não cabia:** a 150 px em DM Mono, ela mede 1080 px. Agora vai a 110 px (792 px).
+2. **O cartão de notificação desenhado inventava uma tela:** agora o aviso é tipografia do filme (decisão D5).
+3. **Mudanças sem o dedo:** agora há um arrasto antes de toda troca sem botão, com três exceções registradas na decisão D12.
+4. **Legendas sem tempo de leitura:** cinco delas não davam nem uma leitura. Agora cada uma tem pelo menos uma leitura inteira (decisões D10 e D11).
+5. **Três tamanhos de texto no quadro do ID:** o rótulo "Complemento" saiu.
 
-## Rodadas do diretor
+A usuária aprovou a versão 2 com os padrões das decisões.
 
-### D1: folha de contato dos quadros parados (um por plano, 4 subquadros), 23/10
+## D0: quadros parados (um por plano)
 
-Folhas: `.render-tmp/09-diretor/diretor/folha-quadros-r1.png` e `-cel.png` (360 px).
+Materiais: `out/critica/paradas/folha-paradas.png` (21 quadros) e `folha-paradas-360.png` (o mesmo, num celular de 360 px).
 
-| gancho | leitura 360 | movimento | composição | profundidade | sincronia | acabamento |
+**Olhar do diretor, antes do crítico:**
+1. **P19 (56,7 s):** o pin caía por cima do "VAI" e se misturava às letras (branco sobre branco). Agora o pin cai primeiro, num quadro vazio, e a logo se abre a partir dele, com uma máscara que se alarga para os dois lados.
+2. **P02 (1,8 s):** a borda de baixo da janela mostrava uma fatia do cartão 4. A tela passou a 0,84×, numa janela de 840 que vai do título ao fim do cartão 3. No P04 a janela encolhe para 640 e mostra só os cartões 2 a 4.
+3. **Loop:** o quadro de 60 s tinha 236 pixels diferentes do de 0 s, porque a respiração de câmera de 0,25 Hz do P18 não assentava antes do fim. Com 0,4 Hz, 0 pixels diferentes. A regra foi para o guia de animação (regra 8).
+
+**Crítica independente (um subagente que não escreveu o código):**
+
+| Plano | Comp. | Leitura 360 | Prof. | Acab. | Marca | Valores |
 |---|---|---|---|---|---|---|
-| 8 | 8 | — (parado) | 8 | 8 | — (parado) | 7 |
+| P01 | 6 | 9 | 4 | 8 | 9 | n/a |
+| P02 | 6 | 6 | 6 | 6 | 9 | 6 |
+| P03 | 7 | 6 | 7 | 5 | 8 | 6 |
+| P04 | 7 | 6 | 7 | 5 | 8 | 6 |
+| P05 | 8 | 9 | 7 | 8 | 8 | 9 |
+| P06 | 5 | 5 | 5 | 6 | 8 | 5 |
+| P07 | 7 | 8 | 6 | 7 | 8 | 8 |
+| P08 | 5 | 7 | 6 | 6 | 7 | n/a |
+| P09 | 6 | 6 | 7 | 4 | 8 | 7 |
+| P10–P12 | 7 | 9 | 6 | 6 | 8 | 9 |
+| P13 | 4 | 7 | 5 | 4 | 6 | 7 |
+| P14 | 6 | 8 | 6 | 7 | 7 | n/a |
+| P15 | 7 | 7 | 7 | 7 | 8 | n/a |
+| P16 | 7 | 8 | 6 | 7 | 8 | 8 |
+| P17 | 6 | 9 | 6 | 6 | 8 | 9 |
+| P18 | 6 | 7 | 6 | 7 | 8 | 8 |
+| P19 | 7 | 8 | 4 | 8 | 9 | n/a |
+| P20 | 6 | 9 | 4 | 9 | 9 | n/a |
 
-Problemas:
-1. **P15 (34–36 s):** o celular pequeno no canto de baixo à direita não se lê a 360 px e parece etiqueta de canto.
-2. **P18 (40–44 s):** a lista fica inteira na tela só ~0,3 s (b84–b86). Não dá para ler.
-3. **P16–P17 (36–40 s):** texto borrado por escala. As telas do site são JPG de 540 px ampliados ~2,8×, e "Pagar R$ 5,90 e gerar QR Code" fica mole.
+**Os 6 maiores problemas, segundo o crítico:**
+1. O dedo fica parado e sem borda (P09–P12, P15, P17): estacionado entre o valor e a legenda, e com a borda branca invisível sobre o branco.
+2. Destaques laranja colidem no ato 1: o traço sob o LOKAL12 quase encosta em "Sem ele" e fica junto com o anel do toque. Além disso, o dedo cobre o "r" de "Copiar".
+3. P09: dois anéis ao mesmo tempo, os botões do cabeçalho rentes à borda e um contêiner de 907 px.
+4. Os cartões sem legenda ficam pesados em cima, com o texto pequeno (P08, P17, P18), e há três bordas esquerdas diferentes.
+5. P06: o endereço tem maiúscula de 11 px no celular, e o traço laranja pesa mais que ele.
+6. P14: a legenda fala de carteira, mas não há carteira na tela.
 
-Correções:
-1. O celular saiu do P15.
-2. P18 reprogramado: frase no b81, lista no b82 (2 s na tela, rolando com aceleração e freio), volta no b86. O whoosh foi para o b82.
-3. Depende de prints em alta resolução das telas "Detalhe da encomenda" e "Retirada" (pedidos à usuária). Até lá, ficam as do site.
+**Corrigido pelo diretor (vale para todos os capítulos):**
+- **Dedo:** ganhou um traço fino de tinta por fora da borda branca. A regra nova: sai do quadro depois de cada gesto e chega de meia a uma batida antes do próximo; mira no canto de baixo à direita do botão; arrasta por dentro do cartão.
+- **Legenda:** o texto passou para x 116, o mesmo eixo dos cartões (a caixa começa em 72).
+- **Cartelas:** a logo desceu para o centro (y 700) e a frase foi para y 1020 e 1112. O grupo fica centrado na área segura.
+- **LOKAL12:** o traço passou para 4 px, só na largura da palavra e 7 px abaixo das maiúsculas, e recolhe no b7, antes do primeiro toque.
+- **P06:** o recorte real fica uma batida e vira a mesma linha em texto nosso, 72 px, em duas linhas.
+- **P13:**
+  - o contêiner tem a forma exata do botão real (988×166, raio 41), sem sombra;
+  - o anel do toque passou para a camada da frente: antes o próprio contêiner o recortava, e ele não aparecia;
+  - a pílula "Pagamento confirmado" também ficou sem sombra.
+- **Contêineres do capítulo 1:** 980 px de largura, para não passarem da borda com a respiração.
+- **Regras novas no guia de animação:**
+  - plano sem legenda centra o cartão em y 883;
+  - um destaque laranja por vez;
+  - uma borda esquerda só;
+  - elemento real do tamanho do contêiner não ganha sombra.
 
-Integração: a virada (b44) desfaz em camadas a pilha do P10 (`F.favores`, do capítulo 2), e o primeiro traço laranja só nasce com o contêiner limpo (b44 + 0,45 s). A saída do texto pela máscara passou a subir 0,3 do corpo a mais, sem sobrar perna de letra.
+**Para os animadores (rodada 0 de cada capítulo):** os itens 3, 4 e 6 e o resto da tabela (veja `docs/critica/capN.md`).
 
-### D2: animático 960×540 com a trilha provisória, 23/10
+## Animático (540×960, música e efeitos provisórios)
 
-Animático: `.render-tmp/09-diretor/diretor/animatico-540.mp4`.
+Arquivo: `.render-tmp/11-animatico-r0.mp4`. Materiais: `out/critica/animatico-r0/` (folha a 2 quadros por segundo, tira de 12 quadros, teste a 360 px, `movimento.txt`).
 
-A energia de movimento foi medida por batida, como média da mudança entre quadros (`.render-tmp/movimento.py`):
-- a batida mais parada era a **b70 (35,0–35,5 s, P15)**, com 0,025 contra mais de 0,19 em todas as outras;
-- nenhum trecho de 0,5 s ficou sem mudança visível;
-- a ação mais rápida está em 21,02–21,22 s (P10, a pilha se apertando).
+- **Som:** as 50 deixas caem todas num acerto medido da trilha, a menos de 12 ms. A mixagem fica em -14,05 LUFS, com pico de -1,47 dBTP.
+- **Ação mais rápida:** de 43,52 a 43,70 s (a tela "Retirada" rolando até a caixa do código).
+- **Trechos parados de mais de 2 s:** eram dois.
+  - De 16,1 a 18,3 s, o cartão "Chegou na agência" ficava parado depois do anel. Agora um traço sublinha a data e a hora do registro no b34, e a câmera respira de 1,00 a 1,03×.
+  - De 57,0 a 59,3 s, a cartela final ficava parada com a frase. Agora a segunda linha da frase entra uma batida depois (b114).
+- **Ritmo:**
+  - cada preço fica cerca de 2,5 s;
+  - as trocas caem nas batidas;
+  - a passagem pílula → tela "Retirada" (40 a 42 s) fica com a pílula pequena no topo por 2 s, mas o dedo entra no meio desse tempo.
 
-| gancho | leitura 360 | movimento | composição | profundidade | sincronia | acabamento |
-|---|---|---|---|---|---|---|
-| 8 | 8 | 7 | 8 | 8 | 8 | 7 |
+## Os capítulos (subagentes)
 
-Problemas:
-1. **b70–b71 (35,0–36,0 s):** batida morta no P15. A notificação fica parada e nada a conduz até a tela de pagar.
-2. **P16–P17:** texto borrado por escala (continua da D1; depende dos prints em alta resolução).
-3. **P18:** o bloco voltando ao centro (43,0–43,6 s) vira um rastro de 4 cópias no desfoque de movimento. Aceito, porque é desfoque natural de um movimento rápido com mola.
+Cada capítulo passou por:
+1. um animador, com no mínimo 3 rodadas registradas em `docs/critica/capN.md`;
+2. um crítico independente, que não escreveu o código;
+3. um corretor;
+4. uma segunda crítica independente;
+5. uma rodada final de acabamento, com a lista do diretor tirada das segundas críticas.
 
-Correção: o cursor vai à notificação no b70, toca no b71 (ela afunda) e desce até o botão de pagar no b72, conduzindo a mudança. Os cliques agora são 71 e 73.
+| Capítulo | Rodadas do animador | 1ª crítica: notas abaixo de 8 | 2ª crítica: notas abaixo de 8 | Acabamento final |
+|---|---|---|---|---|
+| 1. Gancho e endereço | 4 (+2 do corretor) | 18 (a pior: 6) | 8 (todas 7, quase todas em acabamento) | 6 itens feitos; todas as notas 8 ou mais |
+| 2. Chegou e o aviso | 5 (+1) | 14 (a pior: 6) | 7 (todas 7) | 10 itens feitos |
+| 3. O preço e o Pix | 5 (+2) | 18 (a pior: 5) | 10 (a pior: 6, no P14) | 7 itens, terminados por um segundo agente |
+| 4. Retirada e fim | 7 (+2) | 8 (a pior: 6) | 5 (todas 7) | 9 itens feitos |
 
-### D3: render final, 23/10
+**Mudanças do diretor no motor, pedidas pelos animadores:**
+- 8 subquadros de desfoque;
+- a boca da máscara do texto a 0,42 do corpo (não corta mais a vírgula e o "$");
+- a pílula da legenda abre e fecha por recorte, de baixo para cima, sem opacidade, com o texto recortado pela caixa e a caixa velha fechando 0,04 s antes de a nova abrir.
 
-`resultados/09-diretor.mp4`:
-- **Vídeo:** 45,00 s, 2700 quadros a 60 fps, H.264 yuv420p, CRF 16, BT.709.
-- **Som:** -14,0 LUFS, pico -1,4 dBFS.
-- **Deixas:** as 66 caem em batidas da grade medida; na mixagem final, o ataque fica a 0 ms de mediana.
-- **Loop:** t = 45 s é idêntico a t = 0 (0 pixels diferentes). A emenda de `out/teste-de-loop.mp4` é contínua.
+**Na trilha:** os acentos das linhas de preço crescem (b61 a 1,25× e b66 a 1,5×), para o som acompanhar o preço que sobe. A grade medida não mudou (0,00 ms).
 
-Pendências para a crítica seguinte:
-- **Prints em alta das telas de pagar e de retirada:** P16–P17 ainda saem borrados por escala.
-- **Whooshes sem acerto musical:** os da b32 e da b82 estão na grade, mas sem ataque da trilha embaixo.
+**Verificadores:** a verificação independente da rodada final foi cancelada a pedido da usuária, para economizar. Cada corretor conferiu os seus itens em quadros renderizados, e a conferência final ficou com o diretor (abaixo).
 
-## 10-depois-da-critica: crítica exigente do 09
+## Conferência final do diretor (render final)
 
-O 09 ficou intacto. As correções foram feitas na cópia `filmes/10-depois-da-critica/`.
+- **Arquivo:** `resultados/tutorial-primeiro-acesso-vertical.mp4`, com H.264 yuv420p, 1080×1920, 60 fps, BT.709, CRF 16, 60,0 s e 9,4 MB.
+- **Som:** -14,0 LUFS integrado, pico de -1,4 dBFS. As 52 deixas (21 whoosh, 20 pop, 7 click, 2 thump, 1 shutter, 1 buzz) caem todas num acerto medido da trilha, a menos de 12 ms.
+- **Loop:** o quadro de 60 s é idêntico ao de 0 s (0 pixels diferentes). Em `out/teste-de-loop.mp4` (120,0 s), os quadros dos dois lados da emenda são iguais.
+- **Folha de contato** (`out/folha-de-contato.png`, um quadro por batida): os 20 planos na ordem da lista, sem quadro quebrado.
+- **Pôster** (`out/poster.png`): 29,0 s, o R$ 5,90 grande com o tamanho do pacote e a legenda "Paga uma vez, na retirada, pelo tamanho.".
 
-Materiais de cada rodada em `out/10-critica/rN/`:
-- a folha a 2 quadros por segundo;
-- a tira de 12 quadros seguidos em volta da ação mais rápida (medida pela energia de movimento);
-- o teste de celular a 360 px (vídeo e folhas).
-
-Só os segundos afetados foram renderizados de novo.
-
-**Critérios:** gancho nos 2 primeiros segundos, leitura em tela de celular, qualidade do movimento (molas, nenhum quadro morto), variedade (coisa nova a cada 2 a 4 s), composição, fidelidade à marca e sincronia do som.
-
-| Rodada | gancho | leitura no celular | movimento | variedade | composição | marca | sincronia |
-|---|---|---|---|---|---|---|---|
-| R0 (o 09) | 7 | 7 | 7 | 9 | 7 | 8 | 8 |
-| R1 | 7 | 8 | 8 | 9 | 7 | 8 | 8 |
-| R2 | 8 | 8 | 8 | 9 | 8 | 8 | 9 |
-| R3 | 8 | 9 | 8 | 9 | 8 | 9 | 9 |
-
-### R0: os 3 maiores problemas
-1. **44,00–44,25 s (b88), emenda do loop:** a ação mais rápida do filme era um fade, com a cartela laranja desbotando para pêssego e o logo sumindo por opacidade. Em 40,0 s (b80), a entrada na cartela também passava pelo pêssego, num cartão laranja de margens com cara de moldura.
-2. **8,00–8,40 s (b16), texto se sobrepondo na troca:** as três notificações se comprimiam umas sobre as outras.
-3. **32–34 s e 38–40 s (P14, P17), deslizando em vez de acelerar e frear:** a deriva da parede e do balcão era em velocidade constante.
-
-**Correções:**
-1. **Cortinas da marca:** na b80, o laranja sobe por dentro do contêiner. Na b88, a cartela encolhe ainda laranja até a forma do gancho e uma cortina branca desce por dentro. A troca de cor fica escondida, e o loop continua exato (t = 45 s idêntico a t = 0).
-2. O texto das duas notificações mais velhas sai pela máscara antes da compressão.
-3. A deriva passou a usar `easeInOut`.
-
-### R1: os 3 maiores problemas
-1. **1,0–2,0 s, gancho:** a frase "Ninguém em casa." ficava pequena no quadro largo (~13 px a 360 px).
-2. **34–36 s (P15), composição:** a notificação grudada no alto, com um vazio até a pílula.
-3. **16,0 s (b32) e 41,0 s (b82), sincronia:** whooshes sem ataque da trilha embaixo.
-
-**Correções:**
-1. A câmera aproxima até a notificação no b2 (z 1,16) e volta no corte do b4.
-2. A notificação foi para o meio do quadro (cy 450), e o toque do cursor acompanha.
-3. Um aro na b32 e um bumbo com marimba na b82. A trilha foi gerada e medida de novo: as 66 deixas caem num acerto medido, a menos de 20 ms.
-
-### R2
-Todas as notas estão em 8 ou mais. Ficou um ponto aberto: o texto borrado por escala nas telas de pagar e de retirada (36–38 s). Os prints em alta já foram enviados como imagem na conversa e entram assim que estiverem em arquivo no projeto.
-
-### R3: telas em alta resolução
-Chegaram os prints do app "Detalhe da encomenda" e "Retirada", em 1080×2000. Estão em `assets/09/app/app-encomenda.jpg` e `app-retirada.jpg`; os arquivos são JPEG.
-- O layout é o mesmo das telas do site, com o dobro da resolução, então as medidas batem ×2 com diferença de no máximo 2 px.
-- No capítulo 4 do 10 só o recorte no arquivo dobra (`R2`); as posições e as escalas ficaram iguais.
-- **36,0–40,0 s:** o "Pagar R$ 5,90 e gerar QR Code", o "Total a pagar R$ 5,90" e o "Pagamento confirmado" ficaram nítidos (`out/10-critica/r3/p16-antes-depois.png`).
-- Leitura no celular e fidelidade à marca sobem para 9. Não sobra problema aberto da lista.
+**O que eu melhoraria em seguida:**
+1. A tela "Início" (decisão D1) e o print real da mensagem no WhatsApp (decisão D5), se a marca mandar uma conta de exemplo com as datas batendo.
+2. Os dois pontos mais fracos que o animador do cap. 3 deixou registrados: 7 quadros só com o dedo e a legenda em 35,5 s, e o quadro inteiro desfocado entre 40,05 e 40,15 s, quando câmera, cartão e pílula andam juntos.
+3. A ordem dos toques no ato 1 (CEP, Número, Nome, Complemento) segue as legendas do roteiro, mas a tela diz "Copie na ordem em que a loja pede.". Uma versão que toque na ordem da tela (1, 2, 3, 4) trocaria a ordem das duas legendas.

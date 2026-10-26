@@ -1,5 +1,5 @@
 /**
- * Capítulo 2: os favores (P06-P10, batidas 24-44). Ver docs/lista-de-planos.md e docs/GUIA-DE-ANIMACAO.md.
+ * Capítulo 2: os favores (P06-P10, batidas 24-44). Ver docs/09-diretor/lista-de-planos.md e docs/09-diretor/GUIA-DE-ANIMACAO.md.
  *
  * P06  a portaria de novo, em traço: a guarita vazia (cadeira vazia) e o interfone tocando sem resposta.
  * P07  o contêiner vira uma conversa genérica (sem marca): "Vizinho". O polegar envia no b29, a resposta volta no b30.

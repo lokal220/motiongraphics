@@ -1,5 +1,5 @@
 /**
- * Capítulo 4: a agência recebe e o fim (P14-P19, batidas 64-90). Ver docs/lista-de-planos.md e docs/GUIA-DE-ANIMACAO.md.
+ * Capítulo 4: a agência recebe e o fim (P14-P19, batidas 64-90). Ver docs/09-diretor/lista-de-planos.md e docs/09-diretor/GUIA-DE-ANIMACAO.md.
  *
  *   P14 (b64-67) o balcão da agência em traço; a caixa chega deslizando para dentro da moldura de câmera,
  *                que fotografa no b65 (shutter): a foto é o instante congelado e vai para a parede.

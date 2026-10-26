@@ -1,5 +1,5 @@
 /**
- * Capítulo 3: a virada e o endereço (P11-P13, batidas 44-64). Ver docs/lista-de-planos.md e docs/GUIA-DE-ANIMACAO.md.
+ * Capítulo 3: a virada e o endereço (P11-P13, batidas 44-64). Ver docs/09-diretor/lista-de-planos.md e docs/09-diretor/GUIA-DE-ANIMACAO.md.
  *
  *   P11 (b44-47)  a virada: o contêiner limpo e o primeiro laranja do filme, um traço que nasce no b44 na largura
  *                 da frase e encolhe até ficar sob "recebe" no b46. "Compre onde quiser." (b45) /

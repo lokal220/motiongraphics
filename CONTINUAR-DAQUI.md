@@ -13,24 +13,16 @@
 | Legenda do Instagram para o filme 10 | Está na conversa (repetida abaixo) | Pronta para colar |
 | Direção e prompt da capa do filme 10 | Está na conversa (resumida abaixo) | Para gerar no ChatGPT |
 
-- **Último commit:** `9037edb`, "Adiciona o filme 11, tutorial de primeiro acesso (VAI DE LOKAL, 60 s, 9:16)", na branch `main`.
-- **O que está no ar:** nada.
-  - O repositório `https://github.com/lokal220/motiongraphics` existe, mas está **vazio**: os 11 commits locais nunca foram enviados.
-  - Os vídeos foram entregues como arquivo, e nenhum foi publicado.
+- **Último commit:** `931d43f`, "Adiciona o filme 10 em 9:16 e as notas para continuar em outro PC", na `main`, já enviado ao GitHub (05/11/2026).
+- **O que está no ar:** o código e os filmes estão no GitHub, em `https://github.com/lokal220/motiongraphics` (`main`, enviada em 05/11/2026). Nenhum vídeo foi publicado nas redes.
 
 ### Pendências
 
 **Esperam por você:**
-1. **Decidir o push.** Os 11 commits da `main` só existem neste computador.
-   - Trava: o push é você quem autoriza, e o `gh` não está logado (`gh auth login`).
-   - Para não depender do pendrive, o ideal é fazer o push **antes** de trocar de PC.
-2. **Decidir o commit dos 2 vídeos fora do Git:**
-   - `resultados/10-depois-da-critica-9x16.mp4` (novo);
-   - `resultados/06-referencia.mp4` (fica fora de propósito desde o começo).
-   - Trava: a sua decisão.
-3. **Assistir ao filme 11 e ao 10 em 9:16 e aprovar.** Trava: nenhuma.
-4. **Gerar a capa do filme 10 no ChatGPT** com o prompt abaixo e pôr o título e a logo por cima (Canva ou editor do Instagram).
-5. **Publicar o Reels** com a legenda abaixo.
+1. **`resultados/06-referencia.mp4`** continua fora do Git de propósito (é o vídeo de referência). Trava: nenhuma; leve por pendrive se quiser.
+2. **Assistir ao filme 11 e ao 10 em 9:16 e aprovar.** Trava: nenhuma.
+3. **Gerar a capa do filme 10 no ChatGPT** com o prompt abaixo e pôr o título e a logo por cima (Canva ou editor do Instagram).
+4. **Publicar o Reels** com a legenda abaixo.
 
 **Esperam por mim:** nada em andamento. A remontagem do filme 10 em vertical "de verdade" foi **cancelada** a seu pedido.
 

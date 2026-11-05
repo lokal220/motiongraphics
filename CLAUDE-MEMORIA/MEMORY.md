@@ -1,0 +1,1 @@
+- [Entregar motion nos dois formatos](entregar-motion-nos-dois-formatos.md) — todo vídeo sai em vertical 9:16 e horizontal 16:9, sempre
